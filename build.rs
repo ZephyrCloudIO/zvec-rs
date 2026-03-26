@@ -10,6 +10,7 @@ fn main() {
         .define("BUILD_C_BINDINGS", "ON")
         .define("BUILD_TOOLS", "OFF")
         .define("BUILD_PYTHON_BINDINGS", "OFF")
+        .define("CMAKE_POLICY_VERSION_MINIMUM", "3.5")
         .build();
 
     println!("cargo:rustc-link-search=native={}/lib", dst.display());

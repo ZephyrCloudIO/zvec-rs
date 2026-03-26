@@ -1,13 +1,9 @@
 [package]
-name = "zvec-rs"
+name = "zvec"
 version = "0.1.0"
 edition = "2024"
+description = "Rust bindings for the zvec in-process vector database"
 
 [build-dependencies]
 cmake = "0.1"
 bindgen = "0.71"
-
-[dependencies]
-
-[[example]]
-name = "basic"

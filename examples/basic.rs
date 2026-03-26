@@ -1,6 +1,6 @@
 use std::ffi::{CStr, CString};
 use std::ptr;
-use zvec_rs::*;
+use zvec::*;
 
 unsafe fn check(code: ZVecErrorCode, context: &str) -> bool {
     if code == ZVecErrorCode_ZVEC_OK {

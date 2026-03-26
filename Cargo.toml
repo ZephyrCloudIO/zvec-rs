@@ -3,6 +3,7 @@ name = "zvec"
 version = "0.1.0"
 edition = "2024"
 description = "Rust bindings for the zvec in-process vector database"
+links = "zvec_c_api"
 
 [build-dependencies]
 cmake = "0.1"

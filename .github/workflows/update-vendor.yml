@@ -98,7 +98,7 @@ jobs:
         shell: bash
         run: |
           cp -r _zvec _zvec-host
-          cmake -S _zvec-host -B _zvec-host/build -G Ninja
+          cmake -S _zvec-host -B _zvec-host/build -G Ninja -DCMAKE_POLICY_VERSION_MINIMUM=3.5
           cmake --build _zvec-host/build --target protoc --parallel
 
       - name: Configure CMake
@@ -111,6 +111,7 @@ jobs:
           fi
           cmake -S _zvec -B _zvec/build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
             -DBUILD_C_BINDINGS=ON \
             -DBUILD_PYTHON_BINDINGS=OFF \
             -DBUILD_TOOLS=OFF \

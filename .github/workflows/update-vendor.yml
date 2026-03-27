@@ -91,13 +91,15 @@ jobs:
         shell: bash
         run: echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/26.1.10909125" >> "$GITHUB_ENV"
 
-      # Android needs host protoc first
+      # Android needs host protoc first — use a separate source copy
+      # so patches applied here don't conflict with the cross-compile build
       - name: Build host protoc (Android)
         if: matrix.target == 'aarch64-linux-android'
         shell: bash
         run: |
-          cmake -S _zvec -B _zvec/build-host -G Ninja
-          cmake --build _zvec/build-host --target protoc --parallel
+          cp -r _zvec _zvec-host
+          cmake -S _zvec-host -B _zvec-host/build -G Ninja
+          cmake --build _zvec-host/build --target protoc --parallel
 
       - name: Configure CMake
         shell: bash
@@ -105,7 +107,7 @@ jobs:
           EXTRA="${{ matrix.cmake_extra }}"
           PROTOC_FLAG=""
           if [ "${{ matrix.target }}" = "aarch64-linux-android" ]; then
-            PROTOC_FLAG="-DGLOBAL_CC_PROTOBUF_PROTOC=${{ github.workspace }}/_zvec/build-host/bin/protoc"
+            PROTOC_FLAG="-DGLOBAL_CC_PROTOBUF_PROTOC=${{ github.workspace }}/_zvec-host/build/bin/protoc"
           fi
           cmake -S _zvec -B _zvec/build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \

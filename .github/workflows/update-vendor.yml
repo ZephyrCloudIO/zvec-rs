@@ -48,7 +48,7 @@ jobs:
             cmake_extra: ""
           - target: x86_64-apple-darwin
             os: macos-latest
-            cmake_extra: "-DCMAKE_OSX_ARCHITECTURES=x86_64 -DENABLE_NATIVE=OFF"
+            cmake_extra: "-DCMAKE_OSX_ARCHITECTURES=x86_64 -DENABLE_NATIVE=OFF -DAUTO_DETECT_ARCH=OFF -DCMAKE_CXX_FLAGS=-march=x86-64-v2"
           - target: aarch64-apple-darwin
             os: macos-latest
             cmake_extra: ""

@@ -126,8 +126,8 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force staging
-          Copy-Item "_zvec/build/bin/Release/*.dll" staging/
-          Copy-Item "_zvec/build/lib/Release/*.lib" staging/
+          Copy-Item "_zvec/build/bin/*.dll" staging/
+          Copy-Item "_zvec/build/lib/*.lib" staging/
           tar -czf "zvec_c_api-${{ matrix.target }}.tar.gz" -C staging .
 
       - name: Package (macOS)

@@ -47,8 +47,8 @@ jobs:
             os: ubuntu-24.04-arm
             cmake_extra: ""
           - target: x86_64-apple-darwin
-            os: macos-13
-            cmake_extra: ""
+            os: macos-latest
+            cmake_extra: "-DCMAKE_OSX_ARCHITECTURES=x86_64"
           - target: aarch64-apple-darwin
             os: macos-latest
             cmake_extra: ""

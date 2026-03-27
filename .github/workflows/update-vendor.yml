@@ -18,7 +18,7 @@ jobs:
       zvec_sha: ${{ steps.zvec-sha.outputs.sha }}
     steps:
       - name: Checkout zvec
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           repository: ${{ env.ZVEC_REPO }}
           ref: ${{ env.ZVEC_REV }}
@@ -29,7 +29,7 @@ jobs:
         run: echo "sha=$(git -C _zvec rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Upload header
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: zvec-header
           path: _zvec/src/include/zvec/c_api.h
@@ -63,10 +63,10 @@ jobs:
 
     steps:
       - name: Checkout zvec-rs
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Checkout zvec
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           repository: ${{ env.ZVEC_REPO }}
           ref: ${{ env.ZVEC_REV }}
@@ -147,7 +147,7 @@ jobs:
           tar -czf "zvec_c_api-${{ matrix.target }}.tar.gz" -C staging .
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: zvec_c_api-${{ matrix.target }}
           path: "zvec_c_api-${{ matrix.target }}.tar.gz"
@@ -157,19 +157,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           submodules: false
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           path: artifacts
           pattern: zvec_c_api-*
           merge-multiple: true
 
       - name: Download header
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           name: zvec-header
           path: _header

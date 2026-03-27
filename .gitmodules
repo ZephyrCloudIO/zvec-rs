@@ -1,4 +1,4 @@
 [submodule "zvec"]
 	path = zvec
-	url = https://github.com/amrbashir/zvec
+	url = https://github.com/ZephyrCloudIO/zvec
 	branch = zephyr

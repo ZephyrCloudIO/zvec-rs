@@ -1,0 +1,242 @@
+name: Update Vendored Libs
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+env:
+  ZVEC_REPO: ZephyrCloudIO/zvec
+  ZVEC_REV: d6dbc14fa683634e7cda440f7edb4d02414ec0db
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      zvec_sha: ${{ steps.zvec-sha.outputs.sha }}
+    steps:
+      - name: Checkout zvec
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.ZVEC_REPO }}
+          ref: ${{ env.ZVEC_REV }}
+          path: _zvec
+
+      - name: Get zvec commit SHA
+        id: zvec-sha
+        run: echo "sha=$(git -C _zvec rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Upload header
+        uses: actions/upload-artifact@v4
+        with:
+          name: zvec-header
+          path: _zvec/src/include/zvec/c_api.h
+
+  build:
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            cmake_extra: ""
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-24.04-arm
+            cmake_extra: ""
+          - target: x86_64-apple-darwin
+            os: macos-13
+            cmake_extra: ""
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            cmake_extra: ""
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            cmake_extra: ""
+          - target: aarch64-linux-android
+            os: ubuntu-latest
+            cmake_extra: "-DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-21 -DANDROID_STL=c++_static -DENABLE_NATIVE=OFF -DAUTO_DETECT_ARCH=OFF"
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout zvec-rs
+        uses: actions/checkout@v4
+
+      - name: Checkout zvec
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.ZVEC_REPO }}
+          ref: ${{ env.ZVEC_REV }}
+          path: _zvec
+          submodules: recursive
+
+      - name: Setup MSVC (Windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Install Ninja
+        uses: seanmiddleditch/gha-setup-ninja@master
+
+      - name: Setup Android NDK
+        if: matrix.target == 'aarch64-linux-android'
+        uses: android-actions/setup-android@v3
+        with:
+          packages: "ndk;26.1.10909125"
+
+      - name: Set ANDROID_NDK_HOME
+        if: matrix.target == 'aarch64-linux-android'
+        shell: bash
+        run: echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/26.1.10909125" >> "$GITHUB_ENV"
+
+      # Android needs host protoc first
+      - name: Build host protoc (Android)
+        if: matrix.target == 'aarch64-linux-android'
+        shell: bash
+        run: |
+          cmake -S _zvec -B _zvec/build-host -G Ninja
+          cmake --build _zvec/build-host --target protoc --parallel
+
+      - name: Configure CMake
+        shell: bash
+        run: |
+          EXTRA="${{ matrix.cmake_extra }}"
+          PROTOC_FLAG=""
+          if [ "${{ matrix.target }}" = "aarch64-linux-android" ]; then
+            PROTOC_FLAG="-DGLOBAL_CC_PROTOBUF_PROTOC=${{ github.workspace }}/_zvec/build-host/bin/protoc"
+          fi
+          cmake -S _zvec -B _zvec/build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_C_BINDINGS=ON \
+            -DBUILD_PYTHON_BINDINGS=OFF \
+            -DBUILD_TOOLS=OFF \
+            $EXTRA $PROTOC_FLAG
+
+      - name: Build
+        shell: bash
+        run: cmake --build _zvec/build --parallel
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force staging
+          Copy-Item "_zvec/build/bin/Release/*.dll" staging/
+          Copy-Item "_zvec/build/lib/Release/*.lib" staging/
+          tar -czf "zvec_c_api-${{ matrix.target }}.tar.gz" -C staging .
+
+      - name: Package (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          mkdir -p staging
+          cp _zvec/build/lib/libzvec_c_api.dylib staging/
+          tar -czf "zvec_c_api-${{ matrix.target }}.tar.gz" -C staging .
+
+      - name: Package (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          mkdir -p staging
+          cp _zvec/build/lib/libzvec_c_api.so staging/
+          tar -czf "zvec_c_api-${{ matrix.target }}.tar.gz" -C staging .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: zvec_c_api-${{ matrix.target }}
+          path: "zvec_c_api-${{ matrix.target }}.tar.gz"
+
+  release:
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: zvec_c_api-*
+          merge-multiple: true
+
+      - name: Download header
+        uses: actions/download-artifact@v4
+        with:
+          name: zvec-header
+          path: _header
+
+      - name: Compute all SHA256s
+        id: checksums
+        run: |
+          for f in artifacts/zvec_c_api-*.tar.gz; do
+            target=$(basename "$f" | sed 's/zvec_c_api-//;s/.tar.gz//')
+            key=$(echo "$target" | tr '-' '_')
+            hash=$(sha256sum "$f" | cut -d' ' -f1)
+            echo "${key}=${hash}" >> "$GITHUB_OUTPUT"
+          done
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: vendor-${{ needs.prepare.outputs.zvec_sha }}
+        run: |
+          gh release create "$TAG" \
+            --title "Vendor zvec@${{ needs.prepare.outputs.zvec_sha }}" \
+            --notes "Built from ${{ env.ZVEC_REPO }}@${{ needs.prepare.outputs.zvec_sha }}" \
+            artifacts/zvec_c_api-*.tar.gz
+
+      - name: Update header
+        run: cp _header/c_api.h include/zvec/c_api.h
+
+      - name: Update build.rs constants
+        env:
+          TAG: vendor-${{ needs.prepare.outputs.zvec_sha }}
+        run: |
+          python3 -c "
+          import re, sys
+          checksums = {
+              'x86_64-unknown-linux-gnu': '${{ steps.checksums.outputs.x86_64_unknown_linux_gnu }}',
+              'aarch64-unknown-linux-gnu': '${{ steps.checksums.outputs.aarch64_unknown_linux_gnu }}',
+              'x86_64-apple-darwin': '${{ steps.checksums.outputs.x86_64_apple_darwin }}',
+              'aarch64-apple-darwin': '${{ steps.checksums.outputs.aarch64_apple_darwin }}',
+              'x86_64-pc-windows-msvc': '${{ steps.checksums.outputs.x86_64_pc_windows_msvc }}',
+              'aarch64-linux-android': '${{ steps.checksums.outputs.aarch64_linux_android }}',
+          }
+          with open('build.rs', 'r') as f:
+              content = f.read()
+          content = re.sub(
+              r'const VENDOR_TAG: &str = \".*?\"',
+              'const VENDOR_TAG: &str = \"$TAG\"',
+              content,
+          )
+          for target, sha in checksums.items():
+              content = re.sub(
+                  rf'\(\"{re.escape(target)}\", \".*?\"\)',
+                  f'(\"{target}\", \"{sha}\")',
+                  content,
+              )
+          with open('build.rs', 'w') as f:
+              f.write(content)
+          "
+
+      - name: Create PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: vendor-${{ needs.prepare.outputs.zvec_sha }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          BRANCH="vendor-update/${{ needs.prepare.outputs.zvec_sha }}"
+          git checkout -b "$BRANCH"
+          git add build.rs include/zvec/c_api.h
+          git commit -m "vendor zvec@${{ needs.prepare.outputs.zvec_sha }}"
+          git push origin "$BRANCH"
+          gh pr create \
+            --title "Vendor zvec@${{ needs.prepare.outputs.zvec_sha }}" \
+            --body "Built from ${{ env.ZVEC_REPO }}@${{ needs.prepare.outputs.zvec_sha }}. Release: $TAG"

@@ -20,3 +20,31 @@ jobs:
 
       - name: Run basic example
         run: cargo run --example basic
+
+  android:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Android NDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: "ndk;26.1.10909125"
+
+      - name: Set ANDROID_NDK_HOME
+        run: echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/26.1.10909125" >> "$GITHUB_ENV"
+
+      - name: Add Rust Android target
+        run: rustup target add aarch64-linux-android
+
+      - name: Configure Android linker
+        run: |
+          mkdir -p .cargo
+          LINKER="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang"
+          printf '[target.aarch64-linux-android]\nlinker = "%s"\n' "$LINKER" > .cargo/config.toml
+
+      - name: Build for Android
+        run: |
+          export BINDGEN_EXTRA_CLANG_ARGS_aarch64_linux_android="--sysroot=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
+          cargo build --target aarch64-linux-android --example basic

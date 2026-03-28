@@ -7,14 +7,14 @@ use std::path::{Path, PathBuf};
 const REPO: &str = "ZephyrCloudIO/zvec-rs";
 
 // Updated by CI when vendoring new builds
-const VENDOR_TAG: &str = "";
+const VENDOR_TAG: &str = "vendor-d6dbc14";
 const CHECKSUMS: &[(&str, &str)] = &[
-    ("x86_64-unknown-linux-gnu", ""),
-    ("aarch64-unknown-linux-gnu", ""),
-    ("x86_64-apple-darwin", ""),
-    ("aarch64-apple-darwin", ""),
-    ("x86_64-pc-windows-msvc", ""),
-    ("aarch64-linux-android", ""),
+    ("x86_64-unknown-linux-gnu", "b99b336adf2edb61809d098a9e763980ff1df465b20d607b987744cc74039863"),
+    ("aarch64-unknown-linux-gnu", "68aac2ce53d1fbfb8ffb46a9d3d6aaffa80198c271c95cfa9d8aeb0f2e7f84b0"),
+    ("x86_64-apple-darwin", "93e0868a02ad56a8fea473d955cf772f3491af8116d503992afb4b2e71e185b0"),
+    ("aarch64-apple-darwin", "b7347bacc69b91729eea5b35cd9b3ea344f91c32dacd90b2132b80efb06f7077"),
+    ("x86_64-pc-windows-msvc", "640cb9ae7c3d3153f9d7b0cae31186e4b8190d739394271a3e881b3be023679e"),
+    ("aarch64-linux-android", "948b2d6d9f016e1208b5d751b11b666fec07381301bd8d509a0c84a944239b33"),
 ];
 
 fn target_triple() -> String {

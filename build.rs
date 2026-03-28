@@ -28,7 +28,7 @@ fn target_triple() -> String {
         ("x86_64", "macos", _) => "x86_64-apple-darwin".into(),
         ("aarch64", "macos", _) => "aarch64-apple-darwin".into(),
         ("x86_64", "windows", "msvc") => "x86_64-pc-windows-msvc".into(),
-        ("aarch64", "linux", "android") => "aarch64-linux-android".into(),
+        ("aarch64", "android", _) => "aarch64-linux-android".into(),
         _ => panic!("unsupported target: {arch}-{os}-{env}"),
     }
 }

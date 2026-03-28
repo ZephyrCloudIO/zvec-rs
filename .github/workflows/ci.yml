@@ -45,6 +45,6 @@ jobs:
           printf '[target.aarch64-linux-android]\nlinker = "%s"\n' "$LINKER" > .cargo/config.toml
 
       - name: Build for Android
-        run: cargo build --target aarch64-linux-android --example basic
-        env:
-          BINDGEN_EXTRA_CLANG_ARGS_aarch64_linux_android: "--sysroot=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
+        run: |
+          export BINDGEN_EXTRA_CLANG_ARGS_aarch64_linux_android="--sysroot=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
+          cargo build --target aarch64-linux-android --example basic

@@ -18,7 +18,7 @@ jobs:
       zvec_sha: ${{ steps.zvec-sha.outputs.sha }}
     steps:
       - name: Checkout zvec
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: ${{ env.ZVEC_REPO }}
           ref: ${{ env.ZVEC_REV }}
@@ -29,7 +29,7 @@ jobs:
         run: echo "sha=$(git -C _zvec rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Upload header
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: zvec-header
           path: _zvec/src/include/zvec/c_api.h
@@ -47,8 +47,8 @@ jobs:
             os: ubuntu-24.04-arm
             cmake_extra: ""
           - target: x86_64-apple-darwin
-            os: macos-13
-            cmake_extra: ""
+            os: macos-15-intel
+            cmake_extra: "-DENABLE_NATIVE=OFF -DCMAKE_CXX_FLAGS=-march=x86-64-v2"
           - target: aarch64-apple-darwin
             os: macos-latest
             cmake_extra: ""
@@ -63,10 +63,10 @@ jobs:
 
     steps:
       - name: Checkout zvec-rs
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Checkout zvec
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: ${{ env.ZVEC_REPO }}
           ref: ${{ env.ZVEC_REV }}
@@ -91,13 +91,15 @@ jobs:
         shell: bash
         run: echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/26.1.10909125" >> "$GITHUB_ENV"
 
-      # Android needs host protoc first
+      # Android needs host protoc first — use a separate source copy
+      # so patches applied here don't conflict with the cross-compile build
       - name: Build host protoc (Android)
         if: matrix.target == 'aarch64-linux-android'
         shell: bash
         run: |
-          cmake -S _zvec -B _zvec/build-host -G Ninja
-          cmake --build _zvec/build-host --target protoc --parallel
+          cp -r _zvec _zvec-host
+          cmake -S _zvec-host -B _zvec-host/build -G Ninja -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+          cmake --build _zvec-host/build --target protoc --parallel
 
       - name: Configure CMake
         shell: bash
@@ -105,10 +107,11 @@ jobs:
           EXTRA="${{ matrix.cmake_extra }}"
           PROTOC_FLAG=""
           if [ "${{ matrix.target }}" = "aarch64-linux-android" ]; then
-            PROTOC_FLAG="-DGLOBAL_CC_PROTOBUF_PROTOC=${{ github.workspace }}/_zvec/build-host/bin/protoc"
+            PROTOC_FLAG="-DGLOBAL_CC_PROTOBUF_PROTOC=${{ github.workspace }}/_zvec-host/build/bin/protoc"
           fi
           cmake -S _zvec -B _zvec/build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
             -DBUILD_C_BINDINGS=ON \
             -DBUILD_PYTHON_BINDINGS=OFF \
             -DBUILD_TOOLS=OFF \
@@ -123,8 +126,8 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force staging
-          Copy-Item "_zvec/build/bin/Release/*.dll" staging/
-          Copy-Item "_zvec/build/lib/Release/*.lib" staging/
+          Copy-Item "_zvec/build/bin/*.dll" staging/
+          Copy-Item "_zvec/build/lib/*.lib" staging/
           tar -czf "zvec_c_api-${{ matrix.target }}.tar.gz" -C staging .
 
       - name: Package (macOS)
@@ -144,7 +147,7 @@ jobs:
           tar -czf "zvec_c_api-${{ matrix.target }}.tar.gz" -C staging .
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: zvec_c_api-${{ matrix.target }}
           path: "zvec_c_api-${{ matrix.target }}.tar.gz"
@@ -154,19 +157,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           submodules: false
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: artifacts
           pattern: zvec_c_api-*
           merge-multiple: true
 
       - name: Download header
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: zvec-header
           path: _header

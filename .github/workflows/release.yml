@@ -1,4 +1,4 @@
-name: Update Vendored Libs
+name: Release
 
 on:
   workflow_dispatch:

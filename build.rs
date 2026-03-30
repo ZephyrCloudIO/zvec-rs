@@ -6,15 +6,32 @@ use std::path::{Path, PathBuf};
 
 const REPO: &str = "ZephyrCloudIO/zvec-rs";
 
-// Updated by CI when vendoring new builds
-const VENDOR_TAG: &str = "vendor-d6dbc14";
+const VERSION: &str = env!("CARGO_PKG_VERSION");
 const CHECKSUMS: &[(&str, &str)] = &[
-    ("x86_64-unknown-linux-gnu", "c539b401f55d6926f9f3dac87b73f0dd55f97a6ae65c2cfa4e07a92d22888761"),
-    ("aarch64-unknown-linux-gnu", "4305095b01086d0db57888e288b2b69bc9f281dc98dfa457c8717d9b1147d072"),
-    ("x86_64-apple-darwin", "4567035dbf24b133b29dbe5cfd21c4155efea4a04dea55b9ab2b56340b0e1aad"),
-    ("aarch64-apple-darwin", "e6c56b79ba8f00d11d8ddd55a6252c2d3b92cf8ea7279997e2a0a7dd14544ce1"),
-    ("x86_64-pc-windows-msvc", "c1b97de6f5cc18c7a0787af29bb6ea71cedaa3ccb0302bd188d88852fe6fdc4a"),
-    ("aarch64-linux-android", "515aa67383d821f8a64519852a526f4e9ab4f7f419be15f68ed0c5d6e3ac61c0"),
+    (
+        "x86_64-unknown-linux-gnu",
+        "c539b401f55d6926f9f3dac87b73f0dd55f97a6ae65c2cfa4e07a92d22888761",
+    ),
+    (
+        "aarch64-unknown-linux-gnu",
+        "4305095b01086d0db57888e288b2b69bc9f281dc98dfa457c8717d9b1147d072",
+    ),
+    (
+        "x86_64-apple-darwin",
+        "4567035dbf24b133b29dbe5cfd21c4155efea4a04dea55b9ab2b56340b0e1aad",
+    ),
+    (
+        "aarch64-apple-darwin",
+        "e6c56b79ba8f00d11d8ddd55a6252c2d3b92cf8ea7279997e2a0a7dd14544ce1",
+    ),
+    (
+        "x86_64-pc-windows-msvc",
+        "c1b97de6f5cc18c7a0787af29bb6ea71cedaa3ccb0302bd188d88852fe6fdc4a",
+    ),
+    (
+        "aarch64-linux-android",
+        "515aa67383d821f8a64519852a526f4e9ab4f7f419be15f68ed0c5d6e3ac61c0",
+    ),
 ];
 
 fn target_triple() -> String {
@@ -68,7 +85,7 @@ fn download_and_verify(url: &str, expected_sha256: &str, dest: &Path) {
 
     assert!(
         !expected_sha256.is_empty(),
-        "no checksum configured for {url} — run the update-vendor CI workflow"
+        "no checksum configured for {url} — run the release CI workflow"
     );
     let hash = hex::encode(Sha256::digest(&body));
     assert_eq!(
@@ -127,14 +144,6 @@ fn main() {
     let lib_dir = if let Ok(dir) = env::var("ZVEC_LIB_DIR") {
         PathBuf::from(dir)
     } else {
-        if VENDOR_TAG.is_empty() {
-            panic!(
-                "No VENDOR_TAG set in build.rs and ZVEC_LIB_DIR not set. \
-                 Either run the update-vendor CI workflow to populate VENDOR_TAG, \
-                 or set ZVEC_LIB_DIR to a directory containing the prebuilt library."
-            );
-        }
-
         let expected_sha256 = checksum_for_target(&triple);
 
         let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
@@ -144,8 +153,8 @@ fn main() {
         // Skip download if already extracted
         if !lib_file.exists() {
             let archive_name = format!("zvec_c_api-{triple}.tar.gz");
-            let url =
-                format!("https://github.com/{REPO}/releases/download/{VENDOR_TAG}/{archive_name}");
+            let tag = format!("v{VERSION}");
+            let url = format!("https://github.com/{REPO}/releases/download/{tag}/{archive_name}");
 
             let archive_path = out_dir.join(&archive_name);
             download_and_verify(&url, &expected_sha256, &archive_path);

@@ -9,12 +9,12 @@ const REPO: &str = "ZephyrCloudIO/zvec-rs";
 // Updated by CI when vendoring new builds
 const VENDOR_TAG: &str = "vendor-d6dbc14";
 const CHECKSUMS: &[(&str, &str)] = &[
-    ("x86_64-unknown-linux-gnu", "b99b336adf2edb61809d098a9e763980ff1df465b20d607b987744cc74039863"),
-    ("aarch64-unknown-linux-gnu", "68aac2ce53d1fbfb8ffb46a9d3d6aaffa80198c271c95cfa9d8aeb0f2e7f84b0"),
-    ("x86_64-apple-darwin", "93e0868a02ad56a8fea473d955cf772f3491af8116d503992afb4b2e71e185b0"),
-    ("aarch64-apple-darwin", "b7347bacc69b91729eea5b35cd9b3ea344f91c32dacd90b2132b80efb06f7077"),
-    ("x86_64-pc-windows-msvc", "640cb9ae7c3d3153f9d7b0cae31186e4b8190d739394271a3e881b3be023679e"),
-    ("aarch64-linux-android", "948b2d6d9f016e1208b5d751b11b666fec07381301bd8d509a0c84a944239b33"),
+    ("x86_64-unknown-linux-gnu", "c539b401f55d6926f9f3dac87b73f0dd55f97a6ae65c2cfa4e07a92d22888761"),
+    ("aarch64-unknown-linux-gnu", "4305095b01086d0db57888e288b2b69bc9f281dc98dfa457c8717d9b1147d072"),
+    ("x86_64-apple-darwin", "4567035dbf24b133b29dbe5cfd21c4155efea4a04dea55b9ab2b56340b0e1aad"),
+    ("aarch64-apple-darwin", "e6c56b79ba8f00d11d8ddd55a6252c2d3b92cf8ea7279997e2a0a7dd14544ce1"),
+    ("x86_64-pc-windows-msvc", "c1b97de6f5cc18c7a0787af29bb6ea71cedaa3ccb0302bd188d88852fe6fdc4a"),
+    ("aarch64-linux-android", "515aa67383d821f8a64519852a526f4e9ab4f7f419be15f68ed0c5d6e3ac61c0"),
 ];
 
 fn target_triple() -> String {

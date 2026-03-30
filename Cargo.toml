@@ -1,6 +1,6 @@
 [package]
 name = "zvec"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 description = "Rust bindings for the zvec in-process vector database"
 links = "zvec_c_api"

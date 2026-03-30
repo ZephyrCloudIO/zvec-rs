@@ -225,27 +225,14 @@ jobs:
 
       - name: Update build.rs checksums
         run: |
-          python3 -c "
-          import re
-          checksums = {
-              'x86_64-unknown-linux-gnu': '${{ steps.checksums.outputs.x86_64_unknown_linux_gnu }}',
-              'aarch64-unknown-linux-gnu': '${{ steps.checksums.outputs.aarch64_unknown_linux_gnu }}',
-              'x86_64-apple-darwin': '${{ steps.checksums.outputs.x86_64_apple_darwin }}',
-              'aarch64-apple-darwin': '${{ steps.checksums.outputs.aarch64_apple_darwin }}',
-              'x86_64-pc-windows-msvc': '${{ steps.checksums.outputs.x86_64_pc_windows_msvc }}',
-              'aarch64-linux-android': '${{ steps.checksums.outputs.aarch64_linux_android }}',
-          }
-          with open('build.rs', 'r') as f:
-              content = f.read()
-          for target, sha in checksums.items():
-              content = re.sub(
-                  rf'\(\"{re.escape(target)}\", \".*?\"\)',
-                  f'(\"{target}\", \"{sha}\")',
-                  content,
-              )
-          with open('build.rs', 'w') as f:
-              f.write(content)
-          "
+          sed -i \
+            -e 's|("x86_64-unknown-linux-gnu", "[^"]*")|("x86_64-unknown-linux-gnu", "${{ steps.checksums.outputs.x86_64_unknown_linux_gnu }}")|' \
+            -e 's|("aarch64-unknown-linux-gnu", "[^"]*")|("aarch64-unknown-linux-gnu", "${{ steps.checksums.outputs.aarch64_unknown_linux_gnu }}")|' \
+            -e 's|("x86_64-apple-darwin", "[^"]*")|("x86_64-apple-darwin", "${{ steps.checksums.outputs.x86_64_apple_darwin }}")|' \
+            -e 's|("aarch64-apple-darwin", "[^"]*")|("aarch64-apple-darwin", "${{ steps.checksums.outputs.aarch64_apple_darwin }}")|' \
+            -e 's|("x86_64-pc-windows-msvc", "[^"]*")|("x86_64-pc-windows-msvc", "${{ steps.checksums.outputs.x86_64_pc_windows_msvc }}")|' \
+            -e 's|("aarch64-linux-android", "[^"]*")|("aarch64-linux-android", "${{ steps.checksums.outputs.aarch64_linux_android }}")|' \
+            build.rs
 
       - name: Bump version in Cargo.toml
         run: |

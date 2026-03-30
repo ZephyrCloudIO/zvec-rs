@@ -2,6 +2,16 @@ name: Update Vendored Libs
 
 on:
   workflow_dispatch:
+    inputs:
+      bump:
+        description: "Version bump level"
+        required: true
+        default: patch
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
 
 permissions:
   contents: write
@@ -9,14 +19,18 @@ permissions:
 
 env:
   ZVEC_REPO: ZephyrCloudIO/zvec
-  ZVEC_REV: d6dbc14fa683634e7cda440f7edb4d02414ec0db
+  ZVEC_REV: zephyr
 
 jobs:
   prepare:
     runs-on: ubuntu-latest
     outputs:
       zvec_sha: ${{ steps.zvec-sha.outputs.sha }}
+      version: ${{ steps.next-version.outputs.version }}
     steps:
+      - name: Checkout zvec-rs
+        uses: actions/checkout@v6
+
       - name: Checkout zvec
         uses: actions/checkout@v6
         with:
@@ -27,6 +41,18 @@ jobs:
       - name: Get zvec commit SHA
         id: zvec-sha
         run: echo "sha=$(git -C _zvec rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Compute next version
+        id: next-version
+        run: |
+          CURRENT=$(cargo metadata --format-version 1 --no-deps | jq -r '.packages[0].version')
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
+          case "${{ inputs.bump }}" in
+            major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+            minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
+            patch) PATCH=$((PATCH + 1)) ;;
+          esac
+          echo "version=${MAJOR}.${MINOR}.${PATCH}" >> "$GITHUB_OUTPUT"
 
       - name: Upload header
         uses: actions/upload-artifact@v7
@@ -187,22 +213,20 @@ jobs:
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: vendor-${{ needs.prepare.outputs.zvec_sha }}
+          TAG: v${{ needs.prepare.outputs.version }}
         run: |
           gh release create "$TAG" \
-            --title "Vendor zvec@${{ needs.prepare.outputs.zvec_sha }}" \
+            --title "v${{ needs.prepare.outputs.version }} (zvec@${{ needs.prepare.outputs.zvec_sha }})" \
             --notes "Built from ${{ env.ZVEC_REPO }}@${{ needs.prepare.outputs.zvec_sha }}" \
             artifacts/zvec_c_api-*.tar.gz
 
       - name: Update header
         run: cp _header/c_api.h include/zvec/c_api.h
 
-      - name: Update build.rs constants
-        env:
-          TAG: vendor-${{ needs.prepare.outputs.zvec_sha }}
+      - name: Update build.rs checksums
         run: |
           python3 -c "
-          import re, sys
+          import re
           checksums = {
               'x86_64-unknown-linux-gnu': '${{ steps.checksums.outputs.x86_64_unknown_linux_gnu }}',
               'aarch64-unknown-linux-gnu': '${{ steps.checksums.outputs.aarch64_unknown_linux_gnu }}',
@@ -213,11 +237,6 @@ jobs:
           }
           with open('build.rs', 'r') as f:
               content = f.read()
-          content = re.sub(
-              r'const VENDOR_TAG: &str = \".*?\"',
-              'const VENDOR_TAG: &str = \"$TAG\"',
-              content,
-          )
           for target, sha in checksums.items():
               content = re.sub(
                   rf'\(\"{re.escape(target)}\", \".*?\"\)',
@@ -228,18 +247,22 @@ jobs:
               f.write(content)
           "
 
+      - name: Bump version in Cargo.toml
+        run: |
+          sed -i "s/^version = \".*\"/version = \"${{ needs.prepare.outputs.version }}\"/" Cargo.toml
+          cargo update -p zvec
+
       - name: Create PR
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: vendor-${{ needs.prepare.outputs.zvec_sha }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          BRANCH="vendor-update/${{ needs.prepare.outputs.zvec_sha }}"
+          BRANCH="release/v${{ needs.prepare.outputs.version }}"
           git checkout -b "$BRANCH"
-          git add build.rs include/zvec/c_api.h
-          git commit -m "vendor zvec@${{ needs.prepare.outputs.zvec_sha }}"
+          git add build.rs include/zvec/c_api.h Cargo.toml Cargo.lock
+          git commit -m "release: v${{ needs.prepare.outputs.version }} (zvec@${{ needs.prepare.outputs.zvec_sha }})"
           git push origin "$BRANCH"
           gh pr create \
-            --title "Vendor zvec@${{ needs.prepare.outputs.zvec_sha }}" \
-            --body "Built from ${{ env.ZVEC_REPO }}@${{ needs.prepare.outputs.zvec_sha }}. [Release](https://github.com/${{ github.repository }}/releases/tag/$TAG)"
+            --title "release: v${{ needs.prepare.outputs.version }} (zvec@${{ needs.prepare.outputs.zvec_sha }})" \
+            --body "Built from ${{ env.ZVEC_REPO }}@${{ needs.prepare.outputs.zvec_sha }}. [Release](https://github.com/${{ github.repository }}/releases/tag/v${{ needs.prepare.outputs.version }})"

@@ -5,33 +5,18 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 
 const REPO: &str = "ZephyrCloudIO/zvec-rs";
-
 const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+// DO NOT remove this rustfmt skip, the formatting is intentional so release CI can easily
+// update the checksums for new releases by replacing the old ones in-place.
+#[rustfmt::skip]
 const CHECKSUMS: &[(&str, &str)] = &[
-    (
-        "x86_64-unknown-linux-gnu",
-        "d35da0fd2bf5e326ac7fb37d1132969a41ea24f4ecc6047667883b413044103e",
-    ),
-    (
-        "aarch64-unknown-linux-gnu",
-        "486e8e1cf9768cacae30212809b79be7c99d838380205b87f170b4c24e0da185",
-    ),
-    (
-        "x86_64-apple-darwin",
-        "ef2ccdf845f5322a675a5d5b7ef1a1386b8e2526d8f27bd5caa8b407be56cc46",
-    ),
-    (
-        "aarch64-apple-darwin",
-        "35b4d98808c549befa1075397aba18ae3695cab36f0c365ecef697878ced1f5f",
-    ),
-    (
-        "x86_64-pc-windows-msvc",
-        "c22041aa2d8e7b44f33ed335a946b36ada364b59f2bb46e169df39c135760a28",
-    ),
-    (
-        "aarch64-linux-android",
-        "29155d608fdc34a3e0acc97fe573c17a468968db1fe72c477d0a5d37b2acb513",
-    ),
+    ("x86_64-unknown-linux-gnu", "d35da0fd2bf5e326ac7fb37d1132969a41ea24f4ecc6047667883b413044103e"),
+    ("aarch64-unknown-linux-gnu", "486e8e1cf9768cacae30212809b79be7c99d838380205b87f170b4c24e0da185"),
+    ("x86_64-apple-darwin", "ef2ccdf845f5322a675a5d5b7ef1a1386b8e2526d8f27bd5caa8b407be56cc46"),
+    ("aarch64-apple-darwin", "35b4d98808c549befa1075397aba18ae3695cab36f0c365ecef697878ced1f5f"),
+    ("x86_64-pc-windows-msvc", "c22041aa2d8e7b44f33ed335a946b36ada364b59f2bb46e169df39c135760a28"),
+    ("aarch64-linux-android", "29155d608fdc34a3e0acc97fe573c17a468968db1fe72c477d0a5d37b2acb513"),
 ];
 
 fn target_triple() -> String {

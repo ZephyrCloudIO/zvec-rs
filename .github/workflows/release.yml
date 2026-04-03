@@ -18,8 +18,8 @@ permissions:
   pull-requests: write
 
 env:
-  ZVEC_REPO: ZephyrCloudIO/zvec
-  ZVEC_REV: zephyr
+  ZVEC_REPO: alibaba/zvec
+  ZVEC_REV: v0.3.0
 
 jobs:
   prepare:

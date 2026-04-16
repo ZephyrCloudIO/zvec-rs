@@ -2069,7 +2069,7 @@ impl Drop for Collection {
 mod tests {
     use std::{
         fs,
-        path::PathBuf,
+        path::{Path, PathBuf},
         time::{SystemTime, UNIX_EPOCH},
     };
 
@@ -2077,20 +2077,45 @@ mod tests {
 
     use super::{builder, Collection};
 
-    fn temp_collection_path(name: &str) -> PathBuf {
+    struct TestCollectionPath {
+        cleanup_path: PathBuf,
+        zvec_path: String,
+    }
+
+    impl TestCollectionPath {
+        fn as_str(&self) -> &str {
+            &self.zvec_path
+        }
+
+        fn remove_dir_all(&self) {
+            let _ = fs::remove_dir_all(&self.cleanup_path);
+        }
+    }
+
+    fn forward_slash_path(path: &Path) -> String {
+        path.to_string_lossy().replace('\\', "/")
+    }
+
+    fn temp_collection_path(name: &str) -> TestCollectionPath {
         let now_nanos = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("system clock should be after UNIX_EPOCH")
             .as_nanos();
-        std::env::temp_dir().join(format!("zvec-rs-{name}-{}-{now_nanos}", std::process::id()))
+        let cleanup_path = PathBuf::from("target/zvec-rs-tests")
+            .join(format!("{name}-{}-{now_nanos}", std::process::id()));
+        if let Some(parent) = cleanup_path.parent() {
+            fs::create_dir_all(parent).expect("test data directory should be created");
+        }
+
+        TestCollectionPath {
+            zvec_path: forward_slash_path(&cleanup_path),
+            cleanup_path,
+        }
     }
 
     #[test]
     fn open_read_only_smoke() {
         let collection_path = temp_collection_path("read-only");
-        let collection_path_str = collection_path
-            .to_str()
-            .expect("temporary collection path should be valid UTF-8");
         let schema = builder::collection_schema(
             "read_only_smoke",
             vec![
@@ -2099,7 +2124,7 @@ mod tests {
             ],
         );
 
-        let writer = Collection::create_and_open(collection_path_str, &schema)
+        let writer = Collection::create_and_open(collection_path.as_str(), &schema)
             .expect("collection should be created");
         let write_results = writer
             .insert(&[builder::doc(
@@ -2117,7 +2142,7 @@ mod tests {
             .expect("flush should succeed for writable handle");
         drop(writer);
 
-        let reader = Collection::open_read_only(collection_path_str)
+        let reader = Collection::open_read_only(collection_path.as_str())
             .expect("read-only collection should be opened");
         let results = reader
             .query(&builder::vector_query(
@@ -2133,15 +2158,12 @@ mod tests {
         );
         drop(reader);
 
-        let _ = fs::remove_dir_all(collection_path);
+        collection_path.remove_dir_all();
     }
 
     #[test]
     fn upsert_fetch_roundtrip_handles_nullable_and_arrays() {
         let collection_path = temp_collection_path("roundtrip");
-        let collection_path_str = collection_path
-            .to_str()
-            .expect("temporary collection path should be valid UTF-8");
 
         let schema = builder::collection_schema(
             "roundtrip",
@@ -2154,7 +2176,7 @@ mod tests {
             ],
         );
 
-        let collection = Collection::create_and_open(collection_path_str, &schema)
+        let collection = Collection::create_and_open(collection_path.as_str(), &schema)
             .expect("collection should be created");
 
         let docs = vec![builder::doc(
@@ -2191,15 +2213,12 @@ mod tests {
         assert_eq!(tags[1].as_str(), Some("b"));
 
         drop(collection);
-        let _ = fs::remove_dir_all(collection_path);
+        collection_path.remove_dir_all();
     }
 
     #[test]
     fn query_with_filter_and_output_fields() {
         let collection_path = temp_collection_path("query-filter");
-        let collection_path_str = collection_path
-            .to_str()
-            .expect("temporary collection path should be valid UTF-8");
 
         let schema = builder::collection_schema(
             "query_filter",
@@ -2210,7 +2229,7 @@ mod tests {
             ],
         );
 
-        let collection = Collection::create_and_open(collection_path_str, &schema)
+        let collection = Collection::create_and_open(collection_path.as_str(), &schema)
             .expect("collection should be created");
 
         collection
@@ -2252,15 +2271,12 @@ mod tests {
         );
 
         drop(collection);
-        let _ = fs::remove_dir_all(collection_path);
+        collection_path.remove_dir_all();
     }
 
     #[test]
     fn stats_report_doc_count_and_indexes_for_read_only_handles() {
         let collection_path = temp_collection_path("stats");
-        let collection_path_str = collection_path
-            .to_str()
-            .expect("temporary collection path should be valid UTF-8");
 
         let schema = builder::collection_schema(
             "stats",
@@ -2270,7 +2286,7 @@ mod tests {
             ],
         );
 
-        let collection = Collection::create_and_open(collection_path_str, &schema)
+        let collection = Collection::create_and_open(collection_path.as_str(), &schema)
             .expect("collection should be created");
 
         let insert_results = collection
@@ -2334,7 +2350,7 @@ mod tests {
 
         drop(collection);
 
-        let reader = Collection::open_read_only(collection_path_str)
+        let reader = Collection::open_read_only(collection_path.as_str())
             .expect("read-only collection should be opened");
         let read_only_stats = reader.stats().expect("read-only stats should succeed");
         assert_eq!(read_only_stats.doc_count, 3);
@@ -2357,6 +2373,6 @@ mod tests {
         }));
 
         drop(reader);
-        let _ = fs::remove_dir_all(collection_path);
+        collection_path.remove_dir_all();
     }
 }

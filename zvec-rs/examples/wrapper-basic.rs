@@ -1,5 +1,6 @@
 use std::{
     fs,
+    path::PathBuf,
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -11,13 +12,12 @@ fn main() -> zvec_rs::Result<()> {
         .duration_since(UNIX_EPOCH)
         .expect("system time should be after UNIX_EPOCH")
         .as_nanos();
-    let collection_path = std::env::temp_dir().join(format!(
-        "zvec-rs-basic-example-{}-{now_nanos}",
-        std::process::id()
-    ));
-    let collection_path_str = collection_path
-        .to_str()
-        .expect("temporary collection path should be valid UTF-8");
+    let collection_path = PathBuf::from("target/zvec-rs-examples")
+        .join(format!("basic-{}-{now_nanos}", std::process::id()));
+    if let Some(parent) = collection_path.parent() {
+        fs::create_dir_all(parent).expect("example data directory should be created");
+    }
+    let collection_path_str = collection_path.to_string_lossy().replace('\\', "/");
 
     let schema = builder::collection_schema(
         "articles",
@@ -28,7 +28,7 @@ fn main() -> zvec_rs::Result<()> {
         ],
     );
 
-    let collection = Collection::create_and_open(collection_path_str, &schema)?;
+    let collection = Collection::create_and_open(&collection_path_str, &schema)?;
 
     let docs = vec![
         builder::doc(

@@ -21,7 +21,9 @@ unsafe fn check(code: zvec_error_code_t, context: &str) -> bool {
     false
 }
 
-unsafe fn create_simple_test_collection(collection: &mut *mut zvec_collection_t) -> zvec_error_code_t {
+unsafe fn create_simple_test_collection(
+    collection: &mut *mut zvec_collection_t,
+) -> zvec_error_code_t {
     let schema_name = CString::new("test_collection").unwrap();
     let schema = unsafe { zvec_collection_schema_create(schema_name.as_ptr()) };
     if schema.is_null() {
@@ -43,21 +45,13 @@ unsafe fn create_simple_test_collection(collection: &mut *mut zvec_collection_t)
         unsafe { zvec_collection_schema_destroy(schema) };
         return zvec_error_code_t_ZVEC_ERROR_RESOURCE_EXHAUSTED;
     }
-    unsafe {
-        zvec_index_params_set_metric_type(hnsw_params, ZVEC_METRIC_TYPE_COSINE)
-    };
+    unsafe { zvec_index_params_set_metric_type(hnsw_params, ZVEC_METRIC_TYPE_COSINE) };
     unsafe { zvec_index_params_set_hnsw_params(hnsw_params, 16, 200) };
 
     // Field: id (STRING, primary key, invert index)
     let id_name = CString::new("id").unwrap();
-    let id_field = unsafe {
-        zvec_field_schema_create(
-            id_name.as_ptr(),
-            ZVEC_DATA_TYPE_STRING,
-            false,
-            0,
-        )
-    };
+    let id_field =
+        unsafe { zvec_field_schema_create(id_name.as_ptr(), ZVEC_DATA_TYPE_STRING, false, 0) };
     unsafe { zvec_field_schema_set_index_params(id_field, invert_params) };
     let rc = unsafe { zvec_collection_schema_add_field(schema, id_field) };
     if rc != zvec_error_code_t_ZVEC_OK {
@@ -69,14 +63,8 @@ unsafe fn create_simple_test_collection(collection: &mut *mut zvec_collection_t)
 
     // Field: text (STRING, forward field, invert index)
     let text_name = CString::new("text").unwrap();
-    let text_field = unsafe {
-        zvec_field_schema_create(
-            text_name.as_ptr(),
-            ZVEC_DATA_TYPE_STRING,
-            true,
-            0,
-        )
-    };
+    let text_field =
+        unsafe { zvec_field_schema_create(text_name.as_ptr(), ZVEC_DATA_TYPE_STRING, true, 0) };
     unsafe { zvec_field_schema_set_index_params(text_field, invert_params) };
     let rc = unsafe { zvec_collection_schema_add_field(schema, text_field) };
     if rc != zvec_error_code_t_ZVEC_OK {
@@ -89,12 +77,7 @@ unsafe fn create_simple_test_collection(collection: &mut *mut zvec_collection_t)
     // Field: embedding (VECTOR_FP32, dim=3, HNSW index)
     let emb_name = CString::new("embedding").unwrap();
     let emb_field = unsafe {
-        zvec_field_schema_create(
-            emb_name.as_ptr(),
-            ZVEC_DATA_TYPE_VECTOR_FP32,
-            false,
-            3,
-        )
+        zvec_field_schema_create(emb_name.as_ptr(), ZVEC_DATA_TYPE_VECTOR_FP32, false, 3)
     };
     unsafe { zvec_field_schema_set_index_params(emb_field, hnsw_params) };
     let rc = unsafe { zvec_collection_schema_add_field(schema, emb_field) };

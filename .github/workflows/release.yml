@@ -45,7 +45,7 @@ jobs:
       - name: Compute next version
         id: next-version
         run: |
-          CURRENT=$(cargo metadata --format-version 1 --no-deps | jq -r '.packages[0].version')
+          CURRENT=$(cargo metadata --manifest-path Cargo.toml --format-version 1 --no-deps | jq -r '.packages[] | select(.name == "zvec") | .version')
           IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
           case "${{ inputs.bump }}" in
             major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;

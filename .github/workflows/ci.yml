@@ -18,8 +18,11 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Run basic example
-        run: cargo run --example basic
+      - name: Run raw bindings example
+        run: cargo run -p zvec --example basic
+
+      - name: Test safe wrapper crate
+        run: cargo test -p zvec-rs --all-features
 
   android:
     runs-on: ubuntu-latest
@@ -47,4 +50,4 @@ jobs:
       - name: Build for Android
         run: |
           export BINDGEN_EXTRA_CLANG_ARGS_aarch64_linux_android="--sysroot=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
-          cargo build --target aarch64-linux-android --example basic
+          cargo build -p zvec --target aarch64-linux-android --example basic

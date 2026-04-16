@@ -1,9 +1,16 @@
+[workspace]
+members = ["zvec-rs"]
+resolver = "2"
+
 [package]
 name = "zvec"
 version = "0.2.0"
 edition = "2024"
 description = "Rust bindings for the zvec in-process vector database"
+license = "Apache-2.0"
 links = "zvec_c_api"
+readme = "README.md"
+repository = "https://github.com/ZephyrCloudIO/zvec-rs"
 
 [build-dependencies]
 ureq = { version = "3", default-features = false, features = ["rustls"] }

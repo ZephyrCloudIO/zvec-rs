@@ -87,6 +87,9 @@ jobs:
           - target: aarch64-linux-android
             os: ubuntu-latest
             cmake_extra: "-DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-21 -DANDROID_STL=c++_static -DENABLE_NATIVE=OFF -DAUTO_DETECT_ARCH=OFF"
+          - target: x86_64-linux-android
+            os: ubuntu-latest
+            cmake_extra: "-DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake -DANDROID_ABI=x86_64 -DANDROID_PLATFORM=android-21 -DANDROID_STL=c++_static -DENABLE_NATIVE=OFF -DAUTO_DETECT_ARCH=OFF"
 
     runs-on: ${{ matrix.os }}
 
@@ -117,13 +120,13 @@ jobs:
           grep -q 'if(NOT MSVC AND NOT IOS)' _zvec/cmake/bazel.cmake
 
       - name: Setup Android NDK
-        if: matrix.target == 'aarch64-linux-android'
+        if: contains(matrix.target, 'android')
         uses: android-actions/setup-android@v3
         with:
           packages: "ndk;26.1.10909125"
 
       - name: Set ANDROID_NDK_HOME
-        if: matrix.target == 'aarch64-linux-android'
+        if: contains(matrix.target, 'android')
         shell: bash
         run: echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/26.1.10909125" >> "$GITHUB_ENV"
 
@@ -131,7 +134,7 @@ jobs:
       # so patches applied here don't conflict with the cross-compile build.
       # iOS is also a cross-compile and cannot use a target-built protoc.
       - name: Build host protoc
-        if: matrix.target == 'aarch64-linux-android' || matrix.target == 'aarch64-apple-ios'
+        if: contains(matrix.target, 'android') || matrix.target == 'aarch64-apple-ios'
         shell: bash
         run: |
           cp -r _zvec _zvec-host
@@ -144,7 +147,7 @@ jobs:
           EXTRA="${{ matrix.cmake_extra }}"
           PROTOC_FLAG=""
           SDK_FLAG=""
-          if [ "${{ matrix.target }}" = "aarch64-linux-android" ] || [ "${{ matrix.target }}" = "aarch64-apple-ios" ]; then
+          if [[ "${{ matrix.target }}" == *-linux-android ]] || [ "${{ matrix.target }}" = "aarch64-apple-ios" ]; then
             PROTOC_FLAG="-DGLOBAL_CC_PROTOBUF_PROTOC=${{ github.workspace }}/_zvec-host/build/bin/protoc"
           fi
           if [ "${{ matrix.target }}" = "aarch64-apple-ios" ]; then
@@ -248,6 +251,7 @@ jobs:
             -e 's|("aarch64-apple-ios", "[^"]*")|("aarch64-apple-ios", "${{ steps.checksums.outputs.aarch64_apple_ios }}")|' \
             -e 's|("x86_64-pc-windows-msvc", "[^"]*")|("x86_64-pc-windows-msvc", "${{ steps.checksums.outputs.x86_64_pc_windows_msvc }}")|' \
             -e 's|("aarch64-linux-android", "[^"]*")|("aarch64-linux-android", "${{ steps.checksums.outputs.aarch64_linux_android }}")|' \
+            -e 's|("x86_64-linux-android", "[^"]*")|("x86_64-linux-android", "${{ steps.checksums.outputs.x86_64_linux_android }}")|' \
             build.rs
 
       - name: Bump version in Cargo.toml

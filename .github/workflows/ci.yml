@@ -120,6 +120,21 @@ jobs:
           export BINDGEN_EXTRA_CLANG_ARGS_x86_64_linux_android="--sysroot=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
           ZVEC_LIB_DIR="$GITHUB_WORKSPACE/_zvec/build/lib" cargo build -p zvec --target x86_64-linux-android --example basic --locked
 
+      # Publish the freshly built lib so it can be consumed before a release
+      # exists (e.g. wiring into a downstream build via ZVEC_LIB_DIR).
+      - name: Package x86_64 Android artifact
+        run: |
+          mkdir -p staging
+          cp _zvec/build/lib/libzvec_c_api.so staging/
+          tar -czf zvec_c_api-x86_64-linux-android.tar.gz -C staging .
+          test -s zvec_c_api-x86_64-linux-android.tar.gz
+
+      - name: Upload x86_64 Android artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: zvec_c_api-x86_64-linux-android
+          path: zvec_c_api-x86_64-linux-android.tar.gz
+
   ios:
     runs-on: macos-latest
     env:

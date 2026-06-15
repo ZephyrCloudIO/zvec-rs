@@ -6,6 +6,14 @@ on:
   pull_request:
     branches: [master]
 
+env:
+  # CMake 4.0 removed compatibility with `cmake_minimum_required(VERSION < 3.5)`.
+  # Several zvec thirdparty deps (lz4, arrow, …) still declare such low minimums,
+  # and their ExternalProject sub-configures do NOT inherit the `-D` flag we pass
+  # to the top-level configure. Set it in the environment so every nested cmake
+  # invocation picks it up. Harmless on CMake 3.x runners (env var is 4.0+ only).
+  CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+
 jobs:
   smoke-test:
     strategy:

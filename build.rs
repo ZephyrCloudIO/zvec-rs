@@ -18,6 +18,7 @@ const CHECKSUMS: &[(&str, &str)] = &[
     ("aarch64-apple-ios", "966f92d164dac28c65183b026492fff910574b3fe8f55475a886ea2a85e92c64"),
     ("x86_64-pc-windows-msvc", "b0b4d2c0a9dd9ca2291d47e226e4308f72e70592977901739a5d2d00c0fc27ba"),
     ("aarch64-linux-android", "2b6bbb42cf4035822d3056ad7b25e669a7da790f46147ef327c3c68793041098"),
+    ("x86_64-linux-android", ""),
 ];
 
 fn target_triple() -> String {
@@ -33,6 +34,7 @@ fn target_triple() -> String {
         ("aarch64", "ios", _) => "aarch64-apple-ios".into(),
         ("x86_64", "windows", "msvc") => "x86_64-pc-windows-msvc".into(),
         ("aarch64", "android", _) => "aarch64-linux-android".into(),
+        ("x86_64", "android", _) => "x86_64-linux-android".into(),
         _ => panic!("unsupported target: {arch}-{os}-{env}"),
     }
 }

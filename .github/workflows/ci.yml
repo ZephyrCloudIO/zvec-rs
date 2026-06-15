@@ -52,6 +52,74 @@ jobs:
           export BINDGEN_EXTRA_CLANG_ARGS_aarch64_linux_android="--sysroot=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
           cargo build -p zvec --target aarch64-linux-android --example basic
 
+  # x86_64 Android (emulator ABI) has no published artifact yet, so — like iOS —
+  # build the zvec C API from source and link the Rust example against it to
+  # prove the cross-compile works before a release is cut.
+  android_x86_64:
+    runs-on: ubuntu-latest
+    env:
+      ZVEC_REPO: alibaba/zvec
+      ZVEC_REV: v0.4.0
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Checkout zvec
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ env.ZVEC_REPO }}
+          ref: ${{ env.ZVEC_REV }}
+          path: _zvec
+          submodules: recursive
+
+      - name: Install Ninja
+        uses: seanmiddleditch/gha-setup-ninja@v6
+
+      - name: Setup Android NDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: "ndk;26.1.10909125"
+
+      - name: Set ANDROID_NDK_HOME
+        run: echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/26.1.10909125" >> "$GITHUB_ENV"
+
+      - name: Add Rust Android target
+        run: rustup target add x86_64-linux-android
+
+      - name: Build host protoc
+        run: |
+          cp -r _zvec _zvec-host
+          cmake -S _zvec-host -B _zvec-host/build -G Ninja -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+          cmake --build _zvec-host/build --target protoc --parallel
+
+      - name: Build zvec C API for x86_64 Android
+        run: |
+          cmake -S _zvec -B _zvec/build -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake \
+            -DANDROID_ABI=x86_64 \
+            -DANDROID_PLATFORM=android-21 \
+            -DANDROID_STL=c++_static \
+            -DENABLE_NATIVE=OFF \
+            -DAUTO_DETECT_ARCH=OFF \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+            -DBUILD_C_BINDINGS=ON \
+            -DBUILD_PYTHON_BINDINGS=OFF \
+            -DBUILD_TOOLS=OFF \
+            -DGLOBAL_CC_PROTOBUF_PROTOC="$GITHUB_WORKSPACE/_zvec-host/build/bin/protoc"
+          cmake --build _zvec/build --target zvec_c_api --parallel "$(nproc)"
+
+      - name: Configure Android linker
+        run: |
+          mkdir -p .cargo
+          LINKER="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android21-clang"
+          printf '[target.x86_64-linux-android]\nlinker = "%s"\n' "$LINKER" > .cargo/config.toml
+
+      - name: Build Rust bindings for x86_64 Android
+        run: |
+          export BINDGEN_EXTRA_CLANG_ARGS_x86_64_linux_android="--sysroot=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
+          ZVEC_LIB_DIR="$GITHUB_WORKSPACE/_zvec/build/lib" cargo build -p zvec --target x86_64-linux-android --example basic --locked
+
   ios:
     runs-on: macos-latest
     env:

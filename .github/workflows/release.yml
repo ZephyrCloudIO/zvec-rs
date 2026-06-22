@@ -118,6 +118,13 @@ jobs:
       - name: Install Ninja
         uses: seanmiddleditch/gha-setup-ninja@v6
 
+      - name: Install Linux native dependencies
+        if: runner.os == 'Linux' && !contains(matrix.target, 'android')
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libaio-dev
+
       - name: Patch zvec iOS static library names
         if: matrix.target == 'aarch64-apple-ios'
         shell: bash

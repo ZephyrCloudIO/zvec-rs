@@ -17,16 +17,18 @@ use ffi::{
     zvec_error_code_t_ZVEC_ERROR_ALREADY_EXISTS as ZVEC_ERROR_ALREADY_EXISTS,
     zvec_error_code_t_ZVEC_ERROR_FAILED_PRECONDITION as ZVEC_ERROR_FAILED_PRECONDITION,
     zvec_error_code_t_ZVEC_ERROR_INTERNAL_ERROR as ZVEC_ERROR_INTERNAL_ERROR,
-    zvec_error_code_t_ZVEC_OK as ZVEC_OK, ZVEC_DATA_TYPE_ARRAY_DOUBLE, ZVEC_DATA_TYPE_ARRAY_FLOAT,
-    ZVEC_DATA_TYPE_ARRAY_INT32, ZVEC_DATA_TYPE_ARRAY_INT64, ZVEC_DATA_TYPE_ARRAY_STRING,
-    ZVEC_DATA_TYPE_ARRAY_UINT32, ZVEC_DATA_TYPE_ARRAY_UINT64, ZVEC_DATA_TYPE_BINARY,
-    ZVEC_DATA_TYPE_BOOL, ZVEC_DATA_TYPE_DOUBLE, ZVEC_DATA_TYPE_FLOAT, ZVEC_DATA_TYPE_INT32,
-    ZVEC_DATA_TYPE_INT64, ZVEC_DATA_TYPE_SPARSE_VECTOR_FP16, ZVEC_DATA_TYPE_SPARSE_VECTOR_FP32,
-    ZVEC_DATA_TYPE_STRING, ZVEC_DATA_TYPE_UINT32, ZVEC_DATA_TYPE_UINT64,
-    ZVEC_DATA_TYPE_VECTOR_FP16, ZVEC_DATA_TYPE_VECTOR_FP32, ZVEC_DATA_TYPE_VECTOR_FP64,
-    ZVEC_DATA_TYPE_VECTOR_INT16, ZVEC_DATA_TYPE_VECTOR_INT8, ZVEC_INDEX_TYPE_FLAT,
-    ZVEC_INDEX_TYPE_HNSW, ZVEC_INDEX_TYPE_INVERT, ZVEC_INDEX_TYPE_IVF, ZVEC_METRIC_TYPE_COSINE,
-    ZVEC_METRIC_TYPE_IP, ZVEC_METRIC_TYPE_L2, ZVEC_METRIC_TYPE_MIPSL2, ZVEC_METRIC_TYPE_UNDEFINED,
+    zvec_error_code_t_ZVEC_OK as ZVEC_OK, ZVEC_DATA_TYPE_ARRAY_BINARY, ZVEC_DATA_TYPE_ARRAY_BOOL,
+    ZVEC_DATA_TYPE_ARRAY_DOUBLE, ZVEC_DATA_TYPE_ARRAY_FLOAT, ZVEC_DATA_TYPE_ARRAY_INT32,
+    ZVEC_DATA_TYPE_ARRAY_INT64, ZVEC_DATA_TYPE_ARRAY_STRING, ZVEC_DATA_TYPE_ARRAY_UINT32,
+    ZVEC_DATA_TYPE_ARRAY_UINT64, ZVEC_DATA_TYPE_BINARY, ZVEC_DATA_TYPE_BOOL, ZVEC_DATA_TYPE_DOUBLE,
+    ZVEC_DATA_TYPE_FLOAT, ZVEC_DATA_TYPE_INT32, ZVEC_DATA_TYPE_INT64,
+    ZVEC_DATA_TYPE_SPARSE_VECTOR_FP16, ZVEC_DATA_TYPE_SPARSE_VECTOR_FP32, ZVEC_DATA_TYPE_STRING,
+    ZVEC_DATA_TYPE_UINT32, ZVEC_DATA_TYPE_UINT64, ZVEC_DATA_TYPE_VECTOR_BINARY32,
+    ZVEC_DATA_TYPE_VECTOR_BINARY64, ZVEC_DATA_TYPE_VECTOR_FP16, ZVEC_DATA_TYPE_VECTOR_FP32,
+    ZVEC_DATA_TYPE_VECTOR_FP64, ZVEC_DATA_TYPE_VECTOR_INT16, ZVEC_DATA_TYPE_VECTOR_INT4,
+    ZVEC_DATA_TYPE_VECTOR_INT8, ZVEC_INDEX_TYPE_FLAT, ZVEC_INDEX_TYPE_FTS, ZVEC_INDEX_TYPE_HNSW,
+    ZVEC_INDEX_TYPE_INVERT, ZVEC_INDEX_TYPE_IVF, ZVEC_METRIC_TYPE_COSINE, ZVEC_METRIC_TYPE_IP,
+    ZVEC_METRIC_TYPE_L2, ZVEC_METRIC_TYPE_MIPSL2, ZVEC_METRIC_TYPE_UNDEFINED,
     ZVEC_QUANTIZE_TYPE_FP16, ZVEC_QUANTIZE_TYPE_INT4, ZVEC_QUANTIZE_TYPE_INT8,
     ZVEC_QUANTIZE_TYPE_UNDEFINED,
 };
@@ -38,9 +40,12 @@ type ZVecDoc = ffi::zvec_doc_t;
 type ZVecErrorCode = ffi::zvec_error_code_t;
 type ZVecFieldSchema = ffi::zvec_field_schema_t;
 type ZVecIndexType = ffi::zvec_index_type_t;
+type ZVecIndexParams = ffi::zvec_index_params_t;
 type ZVecMetricType = ffi::zvec_metric_type_t;
 type ZVecQuantizeType = ffi::zvec_quantize_type_t;
 type ZVecString = ffi::zvec_string_t;
+type ZVecStringArray = ffi::zvec_string_array_t;
+type ZVecVectorQuery = ffi::zvec_vector_query_t;
 type ZVecWriteResult = ffi::zvec_write_result_t;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
@@ -136,10 +141,15 @@ enum FieldType {
     VectorFp16,
     VectorFp32,
     VectorFp64,
+    VectorBinary32,
+    VectorBinary64,
+    VectorInt4,
     VectorInt8,
     VectorInt16,
     SparseVectorFp16,
     SparseVectorFp32,
+    ArrayBinary,
+    ArrayBool,
     ArrayString,
     ArrayInt32,
     ArrayInt64,
@@ -164,10 +174,15 @@ impl FieldType {
             "VECTOR_FP16" => Some(Self::VectorFp16),
             "VECTOR_FP32" => Some(Self::VectorFp32),
             "VECTOR_FP64" => Some(Self::VectorFp64),
+            "VECTOR_BINARY32" => Some(Self::VectorBinary32),
+            "VECTOR_BINARY64" => Some(Self::VectorBinary64),
+            "VECTOR_INT4" => Some(Self::VectorInt4),
             "VECTOR_INT8" => Some(Self::VectorInt8),
             "VECTOR_INT16" => Some(Self::VectorInt16),
             "SPARSE_VECTOR_FP16" => Some(Self::SparseVectorFp16),
             "SPARSE_VECTOR_FP32" => Some(Self::SparseVectorFp32),
+            "ARRAY_BINARY" => Some(Self::ArrayBinary),
+            "ARRAY_BOOL" => Some(Self::ArrayBool),
             "ARRAY_STRING" => Some(Self::ArrayString),
             "ARRAY_INT32" => Some(Self::ArrayInt32),
             "ARRAY_INT64" => Some(Self::ArrayInt64),
@@ -193,10 +208,15 @@ impl FieldType {
             ZVEC_DATA_TYPE_VECTOR_FP16 => Some(Self::VectorFp16),
             ZVEC_DATA_TYPE_VECTOR_FP32 => Some(Self::VectorFp32),
             ZVEC_DATA_TYPE_VECTOR_FP64 => Some(Self::VectorFp64),
+            ZVEC_DATA_TYPE_VECTOR_BINARY32 => Some(Self::VectorBinary32),
+            ZVEC_DATA_TYPE_VECTOR_BINARY64 => Some(Self::VectorBinary64),
+            ZVEC_DATA_TYPE_VECTOR_INT4 => Some(Self::VectorInt4),
             ZVEC_DATA_TYPE_VECTOR_INT8 => Some(Self::VectorInt8),
             ZVEC_DATA_TYPE_VECTOR_INT16 => Some(Self::VectorInt16),
             ZVEC_DATA_TYPE_SPARSE_VECTOR_FP16 => Some(Self::SparseVectorFp16),
             ZVEC_DATA_TYPE_SPARSE_VECTOR_FP32 => Some(Self::SparseVectorFp32),
+            ZVEC_DATA_TYPE_ARRAY_BINARY => Some(Self::ArrayBinary),
+            ZVEC_DATA_TYPE_ARRAY_BOOL => Some(Self::ArrayBool),
             ZVEC_DATA_TYPE_ARRAY_STRING => Some(Self::ArrayString),
             ZVEC_DATA_TYPE_ARRAY_INT32 => Some(Self::ArrayInt32),
             ZVEC_DATA_TYPE_ARRAY_INT64 => Some(Self::ArrayInt64),
@@ -222,10 +242,15 @@ impl FieldType {
             Self::VectorFp16 => ZVEC_DATA_TYPE_VECTOR_FP16,
             Self::VectorFp32 => ZVEC_DATA_TYPE_VECTOR_FP32,
             Self::VectorFp64 => ZVEC_DATA_TYPE_VECTOR_FP64,
+            Self::VectorBinary32 => ZVEC_DATA_TYPE_VECTOR_BINARY32,
+            Self::VectorBinary64 => ZVEC_DATA_TYPE_VECTOR_BINARY64,
+            Self::VectorInt4 => ZVEC_DATA_TYPE_VECTOR_INT4,
             Self::VectorInt8 => ZVEC_DATA_TYPE_VECTOR_INT8,
             Self::VectorInt16 => ZVEC_DATA_TYPE_VECTOR_INT16,
             Self::SparseVectorFp16 => ZVEC_DATA_TYPE_SPARSE_VECTOR_FP16,
             Self::SparseVectorFp32 => ZVEC_DATA_TYPE_SPARSE_VECTOR_FP32,
+            Self::ArrayBinary => ZVEC_DATA_TYPE_ARRAY_BINARY,
+            Self::ArrayBool => ZVEC_DATA_TYPE_ARRAY_BOOL,
             Self::ArrayString => ZVEC_DATA_TYPE_ARRAY_STRING,
             Self::ArrayInt32 => ZVEC_DATA_TYPE_ARRAY_INT32,
             Self::ArrayInt64 => ZVEC_DATA_TYPE_ARRAY_INT64,
@@ -278,6 +303,12 @@ struct IndexSchemaJson {
     enable_range_optimization: Option<bool>,
     #[serde(default)]
     enable_extended_wildcard: Option<bool>,
+    #[serde(default)]
+    tokenizer_name: Option<String>,
+    #[serde(default)]
+    filters: Option<Vec<String>>,
+    #[serde(default)]
+    extra_params: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -296,6 +327,12 @@ struct QueryJson {
     include_vector: Option<bool>,
     #[serde(default)]
     output_fields: Option<Vec<String>>,
+    #[serde(default)]
+    fts_query_string: Option<String>,
+    #[serde(default)]
+    fts_match_string: Option<String>,
+    #[serde(default)]
+    fts_default_operator: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -321,6 +358,12 @@ struct IndexParamsJson {
     enable_range_optimization: Option<bool>,
     #[serde(default)]
     enable_extended_wildcard: Option<bool>,
+    #[serde(default, rename = "tokenizer_name", alias = "tokenizerName")]
+    tokenizer_name: Option<String>,
+    #[serde(default)]
+    filters: Option<Vec<String>>,
+    #[serde(default, rename = "extra_params", alias = "extraParams")]
+    extra_params: Option<String>,
 }
 
 // ============================================================================
@@ -408,10 +451,124 @@ fn index_type_from_name(name: &str) -> std::result::Result<ZVecIndexType, ZvecEr
         "FLAT" => Ok(ZVEC_INDEX_TYPE_FLAT),
         "IVF" => Ok(ZVEC_INDEX_TYPE_IVF),
         "INVERT" => Ok(ZVEC_INDEX_TYPE_INVERT),
+        "FTS" => Ok(ZVEC_INDEX_TYPE_FTS),
         unsupported => Err(ZvecError::Unsupported(format!(
             "unsupported index type: {unsupported}"
         ))),
     }
+}
+
+fn create_string_array(filters: &[String]) -> Result<*mut ZVecStringArray> {
+    let filter_cstrings = filters
+        .iter()
+        .map(|filter| CString::new(filter.as_str()))
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+    let array = unsafe { ffi::zvec_string_array_create(filters.len()) };
+    if array.is_null() {
+        return Err(ZvecError::Api {
+            code: ZVEC_ERROR_INTERNAL_ERROR as i32,
+            message: "failed to create FTS filter array".to_string(),
+        });
+    }
+
+    for (idx, filter) in filter_cstrings.iter().enumerate() {
+        unsafe { ffi::zvec_string_array_add(array, idx, filter.as_ptr()) };
+    }
+
+    Ok(array)
+}
+
+fn apply_fts_index_params(
+    params: *mut ZVecIndexParams,
+    tokenizer_name: Option<&str>,
+    filters: Option<&[String]>,
+    extra_params: Option<&str>,
+) -> Result<()> {
+    let tokenizer_name_c = tokenizer_name.map(CString::new).transpose()?;
+    let extra_params_c = extra_params.map(CString::new).transpose()?;
+    let filters_ptr = if let Some(filters) = filters {
+        create_string_array(filters)?
+    } else {
+        std::ptr::null_mut()
+    };
+
+    let code = unsafe {
+        ffi::zvec_index_params_set_fts_params(
+            params,
+            tokenizer_name_c
+                .as_ref()
+                .map_or(std::ptr::null(), |value| value.as_ptr()),
+            filters_ptr,
+            extra_params_c
+                .as_ref()
+                .map_or(std::ptr::null(), |value| value.as_ptr()),
+        )
+    };
+
+    if !filters_ptr.is_null() {
+        unsafe { ffi::zvec_string_array_destroy(filters_ptr) };
+    }
+
+    check_code(code)
+}
+
+fn attach_fts_query_params(query_ptr: *mut ZVecVectorQuery, default_operator: &str) -> Result<()> {
+    let default_operator_c = CString::new(default_operator)?;
+    let fts_params = unsafe { ffi::zvec_query_params_fts_create(default_operator_c.as_ptr()) };
+    if fts_params.is_null() {
+        return Err(ZvecError::Api {
+            code: ZVEC_ERROR_INTERNAL_ERROR as i32,
+            message: "failed to create FTS query params".to_string(),
+        });
+    }
+
+    let code = unsafe { ffi::zvec_vector_query_set_fts_params(query_ptr, fts_params) };
+    if code != ZVEC_OK {
+        unsafe { ffi::zvec_query_params_fts_destroy(fts_params) };
+        return check_code(code);
+    }
+
+    Ok(())
+}
+
+fn attach_fts_payload(
+    query_ptr: *mut ZVecVectorQuery,
+    query_string: Option<&str>,
+    match_string: Option<&str>,
+) -> Result<()> {
+    let query_string_c = query_string.map(CString::new).transpose()?;
+    let match_string_c = match_string.map(CString::new).transpose()?;
+    if query_string_c.is_none() && match_string_c.is_none() {
+        return Ok(());
+    }
+
+    let fts_ptr = unsafe { ffi::zvec_fts_create() };
+    if fts_ptr.is_null() {
+        return Err(ZvecError::Api {
+            code: ZVEC_ERROR_INTERNAL_ERROR as i32,
+            message: "failed to create FTS payload".to_string(),
+        });
+    }
+
+    if let Some(query_string_c) = query_string_c.as_ref() {
+        let code = unsafe { ffi::zvec_fts_set_query_string(fts_ptr, query_string_c.as_ptr()) };
+        if code != ZVEC_OK {
+            unsafe { ffi::zvec_fts_destroy(fts_ptr) };
+            return check_code(code);
+        }
+    }
+
+    if let Some(match_string_c) = match_string_c.as_ref() {
+        let code = unsafe { ffi::zvec_fts_set_match_string(fts_ptr, match_string_c.as_ptr()) };
+        if code != ZVEC_OK {
+            unsafe { ffi::zvec_fts_destroy(fts_ptr) };
+            return check_code(code);
+        }
+    }
+
+    let code = unsafe { ffi::zvec_vector_query_set_fts(query_ptr, fts_ptr) };
+    unsafe { ffi::zvec_fts_destroy(fts_ptr) };
+    check_code(code)
 }
 
 fn parse_schema_json(schema_json: &str) -> Result<SchemaJson> {
@@ -484,7 +641,7 @@ fn apply_field_index(field_ptr: *mut ZVecFieldSchema, index: &IndexSchemaJson) -
     };
 
     // Type-specific tuning knobs.
-    match index.index_type.as_str() {
+    let type_specific_result = match index.index_type.as_str() {
         "HNSW" => {
             unsafe {
                 ffi::zvec_index_params_set_hnsw_params(
@@ -493,9 +650,11 @@ fn apply_field_index(field_ptr: *mut ZVecFieldSchema, index: &IndexSchemaJson) -
                     index.ef_construction.unwrap_or(200),
                 )
             };
+            Ok(())
         }
         "FLAT" => {
             // No extra params for FLAT beyond metric/quantize.
+            Ok(())
         }
         "IVF" => {
             unsafe {
@@ -506,6 +665,7 @@ fn apply_field_index(field_ptr: *mut ZVecFieldSchema, index: &IndexSchemaJson) -
                     index.use_soar.unwrap_or(false),
                 )
             };
+            Ok(())
         }
         "INVERT" => {
             unsafe {
@@ -515,10 +675,22 @@ fn apply_field_index(field_ptr: *mut ZVecFieldSchema, index: &IndexSchemaJson) -
                     index.enable_extended_wildcard.unwrap_or(false),
                 )
             };
+            Ok(())
         }
+        "FTS" => apply_fts_index_params(
+            params,
+            index.tokenizer_name.as_deref(),
+            index.filters.as_deref(),
+            index.extra_params.as_deref(),
+        ),
         _ => {
             // Already validated by index_type_from_name above.
+            Ok(())
         }
+    };
+    if let Err(err) = type_specific_result {
+        unsafe { ffi::zvec_index_params_destroy(params) };
+        return Err(err);
     }
 
     // Deep-copies into field schema; safe to destroy params afterwards.
@@ -1275,6 +1447,23 @@ impl Collection {
             };
         }
 
+        // FTS query params and payload are optional extensions to the existing
+        // vector/sparse query JSON contract.
+        if let Some(default_operator) = query.fts_default_operator.as_deref() {
+            if let Err(err) = attach_fts_query_params(query_ptr, default_operator) {
+                unsafe { ffi::zvec_vector_query_destroy(query_ptr) };
+                return Err(err);
+            }
+        }
+        if let Err(err) = attach_fts_payload(
+            query_ptr,
+            query.fts_query_string.as_deref(),
+            query.fts_match_string.as_deref(),
+        ) {
+            unsafe { ffi::zvec_vector_query_destroy(query_ptr) };
+            return Err(err);
+        }
+
         // Execute query.
         let mut docs_ptr = std::ptr::null_mut();
         let mut doc_count = 0usize;
@@ -1303,6 +1492,9 @@ impl Collection {
                 self.ptr,
                 pk_ptrs.as_ptr(),
                 pk_ptrs.len(),
+                std::ptr::null(),
+                0,
+                true,
                 &mut docs_ptr,
                 &mut doc_count,
             )
@@ -1341,7 +1533,7 @@ impl Collection {
             )
         };
 
-        match index_params.index_type.as_str() {
+        let type_specific_result = match index_params.index_type.as_str() {
             "HNSW" => {
                 unsafe {
                     ffi::zvec_index_params_set_hnsw_params(
@@ -1350,8 +1542,9 @@ impl Collection {
                         index_params.ef_construction.unwrap_or(200),
                     )
                 };
+                Ok(())
             }
-            "FLAT" => {}
+            "FLAT" => Ok(()),
             "IVF" => {
                 unsafe {
                     ffi::zvec_index_params_set_ivf_params(
@@ -1361,6 +1554,7 @@ impl Collection {
                         index_params.use_soar.unwrap_or(false),
                     )
                 };
+                Ok(())
             }
             "INVERT" => {
                 unsafe {
@@ -1370,10 +1564,22 @@ impl Collection {
                         index_params.enable_extended_wildcard.unwrap_or(false),
                     )
                 };
+                Ok(())
             }
+            "FTS" => apply_fts_index_params(
+                params,
+                index_params.tokenizer_name.as_deref(),
+                index_params.filters.as_deref(),
+                index_params.extra_params.as_deref(),
+            ),
             _ => {
                 // Already validated by index_type_from_name above.
+                Ok(())
             }
+        };
+        if let Err(err) = type_specific_result {
+            unsafe { ffi::zvec_index_params_destroy(params) };
+            return Err(err);
         }
 
         let code =
@@ -1773,6 +1979,11 @@ impl Collection {
             | FieldType::ArrayUInt64
             | FieldType::ArrayFloat
             | FieldType::ArrayDouble
+            | FieldType::ArrayBinary
+            | FieldType::ArrayBool
+            | FieldType::VectorBinary32
+            | FieldType::VectorBinary64
+            | FieldType::VectorInt4
             | FieldType::VectorFp16 => Err(ZvecError::Unsupported(format!(
                 "field type currently unsupported in write conversion: {:?}",
                 field_type
@@ -2014,8 +2225,13 @@ impl Collection {
             | FieldType::ArrayUInt64
             | FieldType::ArrayFloat
             | FieldType::ArrayDouble
+            | FieldType::ArrayBinary
+            | FieldType::ArrayBool
             | FieldType::SparseVectorFp16
             | FieldType::SparseVectorFp32
+            | FieldType::VectorBinary32
+            | FieldType::VectorBinary64
+            | FieldType::VectorInt4
             | FieldType::VectorFp16 => Err(ZvecError::Unsupported(format!(
                 "field extraction currently unsupported for `{field_name}` ({field_type:?})"
             ))),
@@ -2075,7 +2291,7 @@ mod tests {
 
     use serde_json::{json, Value};
 
-    use super::{builder, Collection};
+    use super::{builder, index_type_from_name, Collection, FieldType, IndexParamsJson, QueryJson};
 
     struct TestCollectionPath {
         cleanup_path: PathBuf,
@@ -2111,6 +2327,71 @@ mod tests {
             zvec_path: forward_slash_path(&cleanup_path),
             cleanup_path,
         }
+    }
+
+    #[test]
+    fn v05_field_types_and_fts_index_are_accepted() {
+        assert_eq!(
+            FieldType::from_type_name("VECTOR_BINARY32"),
+            Some(FieldType::VectorBinary32)
+        );
+        assert_eq!(
+            FieldType::from_type_name("VECTOR_BINARY64"),
+            Some(FieldType::VectorBinary64)
+        );
+        assert_eq!(
+            FieldType::from_type_name("VECTOR_INT4"),
+            Some(FieldType::VectorInt4)
+        );
+        assert_eq!(
+            FieldType::from_type_name("ARRAY_BINARY"),
+            Some(FieldType::ArrayBinary)
+        );
+        assert_eq!(
+            FieldType::from_type_name("ARRAY_BOOL"),
+            Some(FieldType::ArrayBool)
+        );
+        assert!(index_type_from_name("FTS").is_ok());
+    }
+
+    #[test]
+    fn fts_create_index_and_query_json_preserve_snake_case_contract() {
+        let index_params: IndexParamsJson = serde_json::from_str(
+            r#"{
+                "type": "FTS",
+                "tokenizer_name": "jieba",
+                "filters": ["lowercase"],
+                "extra_params": "{\"dict\":\"custom\"}"
+            }"#,
+        )
+        .expect("FTS index params should parse");
+        assert_eq!(index_params.index_type, "FTS");
+        assert_eq!(index_params.tokenizer_name.as_deref(), Some("jieba"));
+        assert_eq!(
+            index_params
+                .filters
+                .as_deref()
+                .and_then(|filters| filters.first())
+                .map(String::as_str),
+            Some("lowercase")
+        );
+        assert_eq!(
+            index_params.extra_params.as_deref(),
+            Some("{\"dict\":\"custom\"}")
+        );
+
+        let query: QueryJson = serde_json::from_value(json!({
+            "field_name": "embedding",
+            "vector": [0.1_f32, 0.2_f32],
+            "topk": 5,
+            "fts_query_string": "title:rust",
+            "fts_match_string": "safe bindings",
+            "fts_default_operator": "AND"
+        }))
+        .expect("FTS query payload should parse");
+        assert_eq!(query.fts_query_string.as_deref(), Some("title:rust"));
+        assert_eq!(query.fts_match_string.as_deref(), Some("safe bindings"));
+        assert_eq!(query.fts_default_operator.as_deref(), Some("AND"));
     }
 
     #[test]

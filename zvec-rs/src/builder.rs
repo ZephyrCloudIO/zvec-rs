@@ -5,7 +5,7 @@
 //!
 //! [`Collection`]: crate::Collection
 
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
 
 // ── Schema builders ──────────────────────────────────────────────────────────
 
@@ -70,6 +70,59 @@ pub fn scalar_field_indexed(name: &str, data_type: &str, nullable: bool) -> Valu
         "data_type": data_type,
         "nullable": nullable,
         "index": { "type": "INVERT" }
+    })
+}
+
+/// Build a text field schema object with an FTS index.
+pub fn fts_field(name: &str, data_type: &str, nullable: bool) -> Value {
+    json!({
+        "name": name,
+        "data_type": data_type,
+        "nullable": nullable,
+        "index": { "type": "FTS" }
+    })
+}
+
+/// Build a text field schema object with an FTS index and tokenizer params.
+pub fn fts_field_with_params(
+    name: &str,
+    data_type: &str,
+    nullable: bool,
+    tokenizer_name: Option<&str>,
+    filters: &[&str],
+    extra_params: Option<&str>,
+) -> Value {
+    let mut index = Map::new();
+    index.insert("type".to_string(), Value::String("FTS".to_string()));
+    if let Some(tokenizer_name) = tokenizer_name {
+        index.insert(
+            "tokenizer_name".to_string(),
+            Value::String(tokenizer_name.to_string()),
+        );
+    }
+    if !filters.is_empty() {
+        index.insert(
+            "filters".to_string(),
+            Value::Array(
+                filters
+                    .iter()
+                    .map(|filter| Value::String((*filter).to_string()))
+                    .collect(),
+            ),
+        );
+    }
+    if let Some(extra_params) = extra_params {
+        index.insert(
+            "extra_params".to_string(),
+            Value::String(extra_params.to_string()),
+        );
+    }
+
+    json!({
+        "name": name,
+        "data_type": data_type,
+        "nullable": nullable,
+        "index": Value::Object(index)
     })
 }
 
@@ -174,6 +227,44 @@ pub fn vector_query_select_with_filter(
     })
 }
 
+/// Build a vector query with optional full-text search payload.
+pub fn vector_query_with_fts(
+    field_name: &str,
+    vector: &[f32],
+    topk: u32,
+    fts_query_string: Option<&str>,
+    fts_match_string: Option<&str>,
+    fts_default_operator: Option<&str>,
+) -> Value {
+    let mut query = Map::new();
+    query.insert(
+        "field_name".to_string(),
+        Value::String(field_name.to_string()),
+    );
+    query.insert("vector".to_string(), json!(vector));
+    query.insert("topk".to_string(), Value::from(topk));
+    if let Some(fts_query_string) = fts_query_string {
+        query.insert(
+            "fts_query_string".to_string(),
+            Value::String(fts_query_string.to_string()),
+        );
+    }
+    if let Some(fts_match_string) = fts_match_string {
+        query.insert(
+            "fts_match_string".to_string(),
+            Value::String(fts_match_string.to_string()),
+        );
+    }
+    if let Some(fts_default_operator) = fts_default_operator {
+        query.insert(
+            "fts_default_operator".to_string(),
+            Value::String(fts_default_operator.to_string()),
+        );
+    }
+
+    Value::Object(query)
+}
+
 /// Build a sparse vector similarity query.
 ///
 /// `indices` and `values` must be the same length and represent a sparse
@@ -211,7 +302,7 @@ pub fn sparse_vector_query_with_filter(
 mod tests {
     use serde_json::json;
 
-    use super::vector_query_select_with_filter;
+    use super::{fts_field_with_params, vector_query_select_with_filter, vector_query_with_fts};
 
     #[test]
     fn vector_query_select_with_filter_includes_requested_fields() {
@@ -231,6 +322,57 @@ mod tests {
                 "topk": 25,
                 "filter": "file != 'excluded.rs'",
                 "output_fields": ["symbol_id"]
+            })
+        );
+    }
+
+    #[test]
+    fn fts_field_with_params_includes_tokenizer_config() {
+        let field = fts_field_with_params(
+            "body",
+            "STRING",
+            true,
+            Some("jieba"),
+            &["lowercase", "stem"],
+            Some("{\"mode\":\"search\"}"),
+        );
+
+        assert_eq!(
+            field,
+            json!({
+                "name": "body",
+                "data_type": "STRING",
+                "nullable": true,
+                "index": {
+                    "type": "FTS",
+                    "tokenizer_name": "jieba",
+                    "filters": ["lowercase", "stem"],
+                    "extra_params": "{\"mode\":\"search\"}"
+                }
+            })
+        );
+    }
+
+    #[test]
+    fn vector_query_with_fts_includes_payload_fields() {
+        let query = vector_query_with_fts(
+            "embedding",
+            &[0.1_f32, 0.2, 0.3],
+            10,
+            Some("title:rust"),
+            Some("safe bindings"),
+            Some("AND"),
+        );
+
+        assert_eq!(
+            query,
+            json!({
+                "field_name": "embedding",
+                "vector": [0.1_f32, 0.2_f32, 0.3_f32],
+                "topk": 10,
+                "fts_query_string": "title:rust",
+                "fts_match_string": "safe bindings",
+                "fts_default_operator": "AND"
             })
         );
     }

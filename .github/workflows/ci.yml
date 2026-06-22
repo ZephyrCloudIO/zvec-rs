@@ -93,6 +93,9 @@ jobs:
       - name: Add Rust Android target
         run: rustup target add x86_64-linux-android
 
+      - name: Patch zvec Android aligned allocation
+        run: bash scripts/patch-zvec-android.sh _zvec
+
       - name: Build host protoc
         run: |
           cp -r _zvec _zvec-host

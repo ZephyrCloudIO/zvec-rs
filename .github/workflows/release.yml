@@ -136,6 +136,11 @@ jobs:
         shell: bash
         run: echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/26.1.10909125" >> "$GITHUB_ENV"
 
+      - name: Patch zvec Android aligned allocation
+        if: contains(matrix.target, 'android')
+        shell: bash
+        run: bash scripts/patch-zvec-android.sh _zvec
+
       # Android needs host protoc first — use a separate source copy
       # so patches applied here don't conflict with the cross-compile build.
       # iOS is also a cross-compile and cannot use a target-built protoc.

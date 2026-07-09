@@ -3,8 +3,11 @@ name: CI
 on:
   push:
     branches: [master]
+  # No base-branch filter: `branches:` on pull_request filters on the BASE
+  # branch, which silently skips CI for stacked PRs (a PR based on another
+  # PR's branch got zero checks). push stays master-only so PR heads don't
+  # double-run.
   pull_request:
-    branches: [master]
 
 env:
   # CMake 4.0 removed compatibility with `cmake_minimum_required(VERSION < 3.5)`.

@@ -156,6 +156,18 @@ jobs:
             -DGLOBAL_CC_PROTOBUF_PROTOC="$GITHUB_WORKSPACE/_zvec-host/build/bin/protoc"
           cmake --build _zvec/build --target zvec_c_api --parallel "$(nproc)"
 
+      - name: Dump Arrow configure logs on failure
+        if: failure()
+        shell: bash
+        run: |
+          # Arrow builds via ExternalProject; its configure failures print
+          # only "Command failed: 1" while the real error sits in stamp-dir
+          # log files. Surface them so failures are diagnosable from CI.
+          find _zvec/build* -path '*ARROW.BUILD-stamp*' -name '*.log' 2>/dev/null | while read -r f; do
+            echo "===== $f ====="
+            tail -120 "$f"
+          done || true
+
       - name: Configure Android linker
         run: |
           mkdir -p .cargo
@@ -279,6 +291,18 @@ jobs:
             -DGLOBAL_CC_PROTOBUF_PROTOC="$GITHUB_WORKSPACE/_zvec-host/build/bin/protoc" \
             -DIOS=ON
           cmake --build _zvec/build --target zvec_c_api --parallel "$NPROC"
+
+      - name: Dump Arrow configure logs on failure
+        if: failure()
+        shell: bash
+        run: |
+          # Arrow builds via ExternalProject; its configure failures print
+          # only "Command failed: 1" while the real error sits in stamp-dir
+          # log files. Surface them so failures are diagnosable from CI.
+          find _zvec/build* -path '*ARROW.BUILD-stamp*' -name '*.log' 2>/dev/null | while read -r f; do
+            echo "===== $f ====="
+            tail -120 "$f"
+          done || true
 
       # For the simulator leg this exercises the build.rs sim paths: the
       # CARGO_CFG_TARGET_ABI == "sim" branch in target_triple(),

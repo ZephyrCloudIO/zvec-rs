@@ -233,6 +233,18 @@ jobs:
         shell: bash
         run: cmake --build _zvec/build --parallel
 
+      - name: Dump Arrow configure logs on failure
+        if: failure()
+        shell: bash
+        run: |
+          # Arrow builds via ExternalProject; its configure failures print
+          # only "Command failed: 1" while the real error sits in stamp-dir
+          # log files. Surface them so failures are diagnosable from CI.
+          find _zvec/build* -path '*ARROW.BUILD-stamp*' -name '*.log' 2>/dev/null | while read -r f; do
+            echo "===== $f ====="
+            tail -120 "$f"
+          done || true
+
       - name: Package (Windows)
         if: runner.os == 'Windows'
         shell: pwsh

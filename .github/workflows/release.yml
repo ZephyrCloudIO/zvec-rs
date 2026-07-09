@@ -26,6 +26,11 @@ env:
   # to the top-level configure. Set it in the environment so every nested cmake
   # invocation picks it up. Harmless on CMake 3.x runners (env var is 4.0+ only).
   CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+  # MUST stay identical to ci.yml's ZVEC_CACHE_VERSION — the two workflows
+  # share cache keys so releases reuse the C API builds CI keeps warm. Bump
+  # BOTH together whenever any C-build flag, patch script, or toolchain pin
+  # changes.
+  ZVEC_CACHE_VERSION: "v1"
 
 jobs:
   prepare:
@@ -35,10 +40,10 @@ jobs:
       version: ${{ steps.next-version.outputs.version }}
     steps:
       - name: Checkout zvec-rs
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Checkout zvec
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: ${{ env.ZVEC_REPO }}
           ref: ${{ env.ZVEC_REV }}
@@ -113,10 +118,25 @@ jobs:
 
     steps:
       - name: Checkout zvec-rs
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
+
+      # SAME key format as ci.yml's from-source jobs, so a release dispatch
+      # reuses the caches CI keeps warm: for the targets CI also builds
+      # (iOS device/sim, x86_64 android) the ~20-40 min from-source build
+      # collapses to a cache restore. The build is deterministic for a
+      # pinned ZVEC_REV; bump ZVEC_CACHE_VERSION on any recipe change.
+      - name: Cache zvec C API build
+        id: zvec-cache
+        uses: actions/cache@v6
+        with:
+          path: |
+            _zvec/build/lib
+            _zvec/build/bin
+          key: zvec-capi-${{ matrix.target }}-${{ env.ZVEC_REV }}-${{ env.ZVEC_CACHE_VERSION }}
 
       - name: Checkout zvec
-        uses: actions/checkout@v6
+        if: steps.zvec-cache.outputs.cache-hit != 'true'
+        uses: actions/checkout@v7
         with:
           repository: ${{ env.ZVEC_REPO }}
           ref: ${{ env.ZVEC_REV }}
@@ -124,39 +144,50 @@ jobs:
           submodules: recursive
 
       - name: Setup MSVC (Windows)
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' && steps.zvec-cache.outputs.cache-hit != 'true'
         uses: ilammy/msvc-dev-cmd@v1
 
       - name: Install Ninja
-        uses: seanmiddleditch/gha-setup-ninja@v6
+        if: steps.zvec-cache.outputs.cache-hit != 'true'
+        shell: bash
+        # Native package managers instead of gha-setup-ninja: that action
+        # flakes on corrupt zip downloads ("Invalid or unsupported zip
+        # format", seen live 2026-07-09) and its runtime targets deprecated
+        # Node 20. brew/apt/choco are preinstalled on all GitHub runners.
+        run: |
+          case "$RUNNER_OS" in
+            macOS) brew install ninja ;;
+            Linux) sudo apt-get install -y ninja-build || { sudo apt-get update && sudo apt-get install -y ninja-build; } ;;
+            Windows) choco install ninja -y ;;
+          esac
 
       - name: Install Linux native dependencies
-        if: runner.os == 'Linux' && !contains(matrix.target, 'android')
+        if: runner.os == 'Linux' && !contains(matrix.target, 'android') && steps.zvec-cache.outputs.cache-hit != 'true'
         shell: bash
         run: |
           sudo apt-get update
           sudo apt-get install -y libaio-dev
 
       - name: Patch zvec iOS static library names
-        if: startsWith(matrix.target, 'aarch64-apple-ios')
+        if: startsWith(matrix.target, 'aarch64-apple-ios') && steps.zvec-cache.outputs.cache-hit != 'true'
         shell: bash
         run: |
           perl -0pi -e 's/if\(NOT MSVC\)\n    set_property\(TARGET \$\{_NAME\}_static PROPERTY OUTPUT_NAME \$\{_NAME\}\)\n  endif\(\)/if(NOT MSVC AND NOT IOS)\n    set_property(TARGET \${_NAME}_static PROPERTY OUTPUT_NAME \${_NAME})\n  endif()/g' _zvec/cmake/bazel.cmake
           grep -q 'if(NOT MSVC AND NOT IOS)' _zvec/cmake/bazel.cmake
 
       - name: Setup Android NDK
-        if: contains(matrix.target, 'android')
-        uses: android-actions/setup-android@v3
+        if: contains(matrix.target, 'android') && steps.zvec-cache.outputs.cache-hit != 'true'
+        uses: android-actions/setup-android@v4
         with:
           packages: "ndk;26.1.10909125"
 
       - name: Set ANDROID_NDK_HOME
-        if: contains(matrix.target, 'android')
+        if: contains(matrix.target, 'android') && steps.zvec-cache.outputs.cache-hit != 'true'
         shell: bash
         run: echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/26.1.10909125" >> "$GITHUB_ENV"
 
       - name: Patch zvec Android aligned allocation
-        if: contains(matrix.target, 'android')
+        if: contains(matrix.target, 'android') && steps.zvec-cache.outputs.cache-hit != 'true'
         shell: bash
         run: bash scripts/patch-zvec-android.sh _zvec
 
@@ -164,7 +195,7 @@ jobs:
       # so patches applied here don't conflict with the cross-compile build.
       # iOS is also a cross-compile and cannot use a target-built protoc.
       - name: Build host protoc
-        if: contains(matrix.target, 'android') || startsWith(matrix.target, 'aarch64-apple-ios')
+        if: (contains(matrix.target, 'android') || startsWith(matrix.target, 'aarch64-apple-ios')) && steps.zvec-cache.outputs.cache-hit != 'true'
         shell: bash
         run: |
           cp -r _zvec _zvec-host
@@ -172,6 +203,7 @@ jobs:
           cmake --build _zvec-host/build --target protoc --parallel
 
       - name: Configure CMake
+        if: steps.zvec-cache.outputs.cache-hit != 'true'
         shell: bash
         run: |
           EXTRA="${{ matrix.cmake_extra }}"
@@ -197,8 +229,21 @@ jobs:
             $EXTRA $PROTOC_FLAG $SDK_FLAG
 
       - name: Build
+        if: steps.zvec-cache.outputs.cache-hit != 'true'
         shell: bash
         run: cmake --build _zvec/build --parallel
+
+      - name: Dump Arrow configure logs on failure
+        if: failure()
+        shell: bash
+        run: |
+          # Arrow builds via ExternalProject; its configure failures print
+          # only "Command failed: 1" while the real error sits in stamp-dir
+          # log files. Surface them so failures are diagnosable from CI.
+          find _zvec/build* -path '*ARROW.BUILD-stamp*' -name '*.log' 2>/dev/null | while read -r f; do
+            echo "===== $f ====="
+            tail -120 "$f"
+          done || true
 
       - name: Package (Windows)
         if: runner.os == 'Windows'
@@ -236,7 +281,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           submodules: false
 

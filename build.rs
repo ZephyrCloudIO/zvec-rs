@@ -91,22 +91,45 @@ fn checksum_for_target(triple: &str) -> &'static str {
         .unwrap_or_else(|| panic!("no checksum for target: {triple}"))
 }
 
-fn download_and_verify(url: &str, expected_sha256: &str, dest: &Path) {
-    let resp = ureq::get(url)
-        .call()
-        .expect("failed to download vendor archive");
-    let len: usize = resp
-        .headers()
-        .get("content-length")
-        .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.parse().ok())
-        .unwrap_or(0);
+/// Fetch `url` with bounded retries + exponential backoff. GitHub's release
+/// CDN intermittently returns 5xx (a plain 504 killed a CI run on
+/// 2026-07-09); a transient gateway error must not fail the whole build.
+fn download_with_retries(url: &str) -> Vec<u8> {
+    const MAX_ATTEMPTS: u32 = 4;
+    let mut delay = std::time::Duration::from_secs(2);
+    let mut last_err = String::new();
 
-    let mut body = Vec::with_capacity(len);
-    resp.into_body()
-        .as_reader()
-        .read_to_end(&mut body)
-        .expect("failed to read response body");
+    for attempt in 1..=MAX_ATTEMPTS {
+        match ureq::get(url).call() {
+            Ok(resp) => {
+                let len: usize = resp
+                    .headers()
+                    .get("content-length")
+                    .and_then(|v| v.to_str().ok())
+                    .and_then(|v| v.parse().ok())
+                    .unwrap_or(0);
+                let mut body = Vec::with_capacity(len);
+                match resp.into_body().as_reader().read_to_end(&mut body) {
+                    Ok(_) => return body,
+                    Err(e) => last_err = format!("failed to read response body: {e}"),
+                }
+            }
+            Err(e) => last_err = e.to_string(),
+        }
+        if attempt < MAX_ATTEMPTS {
+            eprintln!(
+                "download attempt {attempt}/{MAX_ATTEMPTS} for {url} failed ({last_err}); \
+                 retrying in {delay:?}"
+            );
+            std::thread::sleep(delay);
+            delay *= 2;
+        }
+    }
+    panic!("failed to download vendor archive after {MAX_ATTEMPTS} attempts: {last_err} ({url})");
+}
+
+fn download_and_verify(url: &str, expected_sha256: &str, dest: &Path) {
+    let body = download_with_retries(url);
 
     assert!(
         !expected_sha256.is_empty(),

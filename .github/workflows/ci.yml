@@ -3,8 +3,11 @@ name: CI
 on:
   push:
     branches: [master]
+  # No base-branch filter: `branches:` on pull_request filters on the BASE
+  # branch, which silently skips CI for stacked PRs (a PR based on another
+  # PR's branch got zero checks). push stays master-only so PR heads don't
+  # double-run.
   pull_request:
-    branches: [master]
 
 env:
   # CMake 4.0 removed compatibility with `cmake_minimum_required(VERSION < 3.5)`.
@@ -13,6 +16,12 @@ env:
   # to the top-level configure. Set it in the environment so every nested cmake
   # invocation picks it up. Harmless on CMake 3.x runners (env var is 4.0+ only).
   CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+  # Shared cache-key version for the from-source C API builds — the SAME key
+  # format is used by release.yml, so a release dispatch reuses the caches CI
+  # keeps warm (and vice versa). BUMP THIS whenever any C-build flag, patch
+  # script, or toolchain pin changes; the pinned ZVEC_REV in the key handles
+  # source changes.
+  ZVEC_CACHE_VERSION: "v1"
 
 jobs:
   smoke-test:
@@ -24,7 +33,7 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Run raw bindings example
         run: cargo run -p zvec --example basic
@@ -36,10 +45,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Setup Android NDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
         with:
           packages: "ndk;26.1.10909125"
 
@@ -69,10 +78,22 @@ jobs:
       ZVEC_REV: v0.5.0
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
+
+      # The C API build is deterministic for a pinned ZVEC_REV (same source,
+      # same toolchain flags), so cache the built lib and skip the ~20 min
+      # from-source CMake build entirely on a hit. ZVEC_CACHE_VERSION in
+      # the key (shared with release.yml) invalidates on recipe changes.
+      - name: Cache zvec C API build
+        id: zvec-cache
+        uses: actions/cache@v6
+        with:
+          path: _zvec/build/lib
+          key: zvec-capi-x86_64-linux-android-${{ env.ZVEC_REV }}-${{ env.ZVEC_CACHE_VERSION }}
 
       - name: Checkout zvec
-        uses: actions/checkout@v6
+        if: steps.zvec-cache.outputs.cache-hit != 'true'
+        uses: actions/checkout@v7
         with:
           repository: ${{ env.ZVEC_REPO }}
           ref: ${{ env.ZVEC_REV }}
@@ -80,10 +101,23 @@ jobs:
           submodules: recursive
 
       - name: Install Ninja
-        uses: seanmiddleditch/gha-setup-ninja@v6
+        if: steps.zvec-cache.outputs.cache-hit != 'true'
+        shell: bash
+        # Native package managers instead of gha-setup-ninja: that action
+        # flakes on corrupt zip downloads ("Invalid or unsupported zip
+        # format", seen live 2026-07-09) and its runtime targets deprecated
+        # Node 20. brew/apt/choco are preinstalled on all GitHub runners.
+        run: |
+          case "$RUNNER_OS" in
+            macOS) brew install ninja ;;
+            Linux) sudo apt-get install -y ninja-build || { sudo apt-get update && sudo apt-get install -y ninja-build; } ;;
+            Windows) choco install ninja -y ;;
+          esac
 
+      # NDK stays unconditional: the cargo build below needs its linker and
+      # bindgen sysroot even on a cache hit.
       - name: Setup Android NDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
         with:
           packages: "ndk;26.1.10909125"
 
@@ -94,15 +128,18 @@ jobs:
         run: rustup target add x86_64-linux-android
 
       - name: Patch zvec Android aligned allocation
+        if: steps.zvec-cache.outputs.cache-hit != 'true'
         run: bash scripts/patch-zvec-android.sh _zvec
 
       - name: Build host protoc
+        if: steps.zvec-cache.outputs.cache-hit != 'true'
         run: |
           cp -r _zvec _zvec-host
           cmake -S _zvec-host -B _zvec-host/build -G Ninja -DCMAKE_POLICY_VERSION_MINIMUM=3.5
           cmake --build _zvec-host/build --target protoc --parallel
 
       - name: Build zvec C API for x86_64 Android
+        if: steps.zvec-cache.outputs.cache-hit != 'true'
         run: |
           cmake -S _zvec -B _zvec/build -G Ninja \
             -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake \
@@ -118,6 +155,18 @@ jobs:
             -DBUILD_TOOLS=OFF \
             -DGLOBAL_CC_PROTOBUF_PROTOC="$GITHUB_WORKSPACE/_zvec-host/build/bin/protoc"
           cmake --build _zvec/build --target zvec_c_api --parallel "$(nproc)"
+
+      - name: Dump Arrow configure logs on failure
+        if: failure()
+        shell: bash
+        run: |
+          # Arrow builds via ExternalProject; its configure failures print
+          # only "Command failed: 1" while the real error sits in stamp-dir
+          # log files. Surface them so failures are diagnosable from CI.
+          find _zvec/build* -path '*ARROW.BUILD-stamp*' -name '*.log' 2>/dev/null | while read -r f; do
+            echo "===== $f ====="
+            tail -120 "$f"
+          done || true
 
       - name: Configure Android linker
         run: |
@@ -145,22 +194,46 @@ jobs:
           name: zvec_c_api-x86_64-linux-android
           path: zvec_c_api-x86_64-linux-android.tar.gz
 
-  ios:
+  # Device and simulator build in PARALLEL matrix legs (they were serial in
+  # one job, ~34 min cold), each behind a build-output cache (deterministic
+  # for a pinned ZVEC_REV — warm runs skip the from-source CMake build
+  # entirely). The `ios` job below aggregates them so the branch-protection
+  # required-check context "ios" is unchanged.
+  ios-build:
     # Pinned to macos-15 (Xcode 16.x): the macos-latest migration to
     # macos-26 / Xcode 26.5 broke Apache Arrow 21.0.0's iOS cross-compile
     # configure (this job was green on macos-15-arm64 through 2026-06-22 and
     # started failing only on the macos-26-arm64 image). Revisit once Arrow's
     # iOS build supports Xcode 26.x.
     runs-on: macos-15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - variant: device
+            sdk: iphoneos
+            rust-target: aarch64-apple-ios
+          - variant: simulator
+            sdk: iphonesimulator
+            rust-target: aarch64-apple-ios-sim
+    name: ios-build (${{ matrix.variant }})
     env:
       ZVEC_REPO: alibaba/zvec
       ZVEC_REV: v0.5.0
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
+
+      - name: Cache zvec C API build
+        id: zvec-cache
+        uses: actions/cache@v6
+        with:
+          path: _zvec/build/lib
+          key: zvec-capi-${{ matrix.rust-target }}-${{ env.ZVEC_REV }}-${{ env.ZVEC_CACHE_VERSION }}
 
       - name: Checkout zvec
-        uses: actions/checkout@v6
+        if: steps.zvec-cache.outputs.cache-hit != 'true'
+        uses: actions/checkout@v7
         with:
           repository: ${{ env.ZVEC_REPO }}
           ref: ${{ env.ZVEC_REV }}
@@ -168,25 +241,42 @@ jobs:
           submodules: recursive
 
       - name: Install Ninja
-        uses: seanmiddleditch/gha-setup-ninja@v6
+        if: steps.zvec-cache.outputs.cache-hit != 'true'
+        shell: bash
+        # Native package managers instead of gha-setup-ninja: that action
+        # flakes on corrupt zip downloads ("Invalid or unsupported zip
+        # format", seen live 2026-07-09) and its runtime targets deprecated
+        # Node 20. brew/apt/choco are preinstalled on all GitHub runners.
+        run: |
+          case "$RUNNER_OS" in
+            macOS) brew install ninja ;;
+            Linux) sudo apt-get install -y ninja-build || { sudo apt-get update && sudo apt-get install -y ninja-build; } ;;
+            Windows) choco install ninja -y ;;
+          esac
 
       - name: Patch zvec iOS static library names
+        if: steps.zvec-cache.outputs.cache-hit != 'true'
         run: |
           perl -0pi -e 's/if\(NOT MSVC\)\n    set_property\(TARGET \$\{_NAME\}_static PROPERTY OUTPUT_NAME \$\{_NAME\}\)\n  endif\(\)/if(NOT MSVC AND NOT IOS)\n    set_property(TARGET \${_NAME}_static PROPERTY OUTPUT_NAME \${_NAME})\n  endif()/g' _zvec/cmake/bazel.cmake
           grep -q 'if(NOT MSVC AND NOT IOS)' _zvec/cmake/bazel.cmake
 
-      - name: Add Rust iOS targets
-        run: rustup target add aarch64-apple-ios aarch64-apple-ios-sim
+      - name: Add Rust iOS target
+        run: rustup target add ${{ matrix.rust-target }}
 
       - name: Build host protoc
+        if: steps.zvec-cache.outputs.cache-hit != 'true'
         run: |
           cp -r _zvec _zvec-host
           cmake -S _zvec-host -B _zvec-host/build -G Ninja -DCMAKE_POLICY_VERSION_MINIMUM=3.5
           cmake --build _zvec-host/build --target protoc --parallel
 
-      - name: Build zvec C API for iOS
+      # Device vs simulator differ only by SDK sysroot — that is what stamps
+      # the dylib's platform (a device dylib will not link into a simulator
+      # app and vice versa).
+      - name: Build zvec C API (${{ matrix.sdk }})
+        if: steps.zvec-cache.outputs.cache-hit != 'true'
         run: |
-          SDK_PATH=$(xcrun --sdk iphoneos --show-sdk-path)
+          SDK_PATH=$(xcrun --sdk ${{ matrix.sdk }} --show-sdk-path)
           NPROC=$(sysctl -n hw.ncpu)
           cmake -S _zvec -B _zvec/build -G Ninja \
             -DCMAKE_SYSTEM_NAME=iOS \
@@ -202,41 +292,44 @@ jobs:
             -DIOS=ON
           cmake --build _zvec/build --target zvec_c_api --parallel "$NPROC"
 
-      - name: Check Rust bindings for iOS
-        run: ZVEC_LIB_DIR="$GITHUB_WORKSPACE/_zvec/build/lib" cargo check -p zvec --target aarch64-apple-ios --locked
-
-      # Simulator gets its own C build (different SDK sysroot -> different
-      # platform stamp; a device dylib will not link into a simulator app).
-      # Reuses the already-built host protoc and the already-patched _zvec
-      # source; only the SDK + output dir differ.
-      - name: Build zvec C API for iOS Simulator
+      - name: Dump Arrow configure logs on failure
+        if: failure()
+        shell: bash
         run: |
-          SDK_PATH=$(xcrun --sdk iphonesimulator --show-sdk-path)
-          NPROC=$(sysctl -n hw.ncpu)
-          cmake -S _zvec -B _zvec/build-sim -G Ninja \
-            -DCMAKE_SYSTEM_NAME=iOS \
-            -DCMAKE_OSX_DEPLOYMENT_TARGET=13.0 \
-            -DCMAKE_OSX_ARCHITECTURES=arm64 \
-            -DCMAKE_OSX_SYSROOT="$SDK_PATH" \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
-            -DBUILD_C_BINDINGS=ON \
-            -DBUILD_PYTHON_BINDINGS=OFF \
-            -DBUILD_TOOLS=OFF \
-            -DGLOBAL_CC_PROTOBUF_PROTOC="$GITHUB_WORKSPACE/_zvec-host/build/bin/protoc" \
-            -DIOS=ON
-          cmake --build _zvec/build-sim --target zvec_c_api --parallel "$NPROC"
+          # Arrow builds via ExternalProject; its configure failures print
+          # only "Command failed: 1" while the real error sits in stamp-dir
+          # log files. Surface them so failures are diagnosable from CI.
+          find _zvec/build* -path '*ARROW.BUILD-stamp*' -name '*.log' 2>/dev/null | while read -r f; do
+            echo "===== $f ====="
+            tail -120 "$f"
+          done || true
 
-      # Exercises the build.rs simulator paths this repo added: the
-      # CARGO_CFG_TARGET_ABI == "sim" branch in target_triple(), apple_sdk_path
-      # resolving the iphonesimulator SDK, and the bindgen --target/--sysroot
-      # override (without which bindgen rejects the -sim triple).
-      - name: Check Rust bindings for iOS Simulator
-        run: ZVEC_LIB_DIR="$GITHUB_WORKSPACE/_zvec/build-sim/lib" cargo check -p zvec --target aarch64-apple-ios-sim --locked
+      # For the simulator leg this exercises the build.rs sim paths: the
+      # CARGO_CFG_TARGET_ABI == "sim" branch in target_triple(),
+      # apple_sdk_path resolving the iphonesimulator SDK, and the bindgen
+      # --target/--sysroot override (without which bindgen rejects the -sim
+      # triple).
+      - name: Check Rust bindings (${{ matrix.rust-target }})
+        run: ZVEC_LIB_DIR="$GITHUB_WORKSPACE/_zvec/build/lib" cargo check -p zvec --target ${{ matrix.rust-target }} --locked
 
       - name: Package iOS artifact smoke
+        if: matrix.variant == 'device'
         run: |
           mkdir -p staging
           cp _zvec/build/lib/libzvec_c_api.dylib staging/
           tar -czf zvec_c_api-aarch64-apple-ios.tar.gz -C staging .
           test -s zvec_c_api-aarch64-apple-ios.tar.gz
+
+  # Aggregator preserving the branch-protection required-check context "ios"
+  # across the matrix split above. `if: always()` + explicit result check:
+  # a skipped/failed leg must fail this job, never skip it.
+  ios:
+    runs-on: ubuntu-latest
+    needs: ios-build
+    if: always()
+    steps:
+      - name: All iOS legs green
+        run: |
+          result="${{ needs.ios-build.result }}"
+          echo "ios-build matrix result: $result"
+          [ "$result" = "success" ]

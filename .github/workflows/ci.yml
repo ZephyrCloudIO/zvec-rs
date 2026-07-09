@@ -21,7 +21,7 @@ env:
   # keeps warm (and vice versa). BUMP THIS whenever any C-build flag, patch
   # script, or toolchain pin changes; the pinned ZVEC_REV in the key handles
   # source changes.
-  ZVEC_CACHE_VERSION: "v1"
+  ZVEC_CACHE_VERSION: "v1-xcode26-probe"
 
 jobs:
   smoke-test:
@@ -205,7 +205,7 @@ jobs:
     # configure (this job was green on macos-15-arm64 through 2026-06-22 and
     # started failing only on the macos-26-arm64 image). Revisit once Arrow's
     # iOS build supports Xcode 26.x.
-    runs-on: macos-15
+    runs-on: macos-26
     strategy:
       fail-fast: false
       matrix:

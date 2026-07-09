@@ -254,14 +254,20 @@ jobs:
             Windows) choco install ninja -y ;;
           esac
 
-      # Arrow's arrow_create_merged_static_lib validates that `libtool` is
-      # Apple's. /usr/bin/libtool is an xcrun SHIM which fails that check
-      # under the iOS cross-compile SDK context on Xcode 26.5 images
-      # ("libtool found appears not to be Apple's libtool", apache/arrow
-      # #44384) — put the toolchain's real libtool first on PATH so CMake's
-      # find_program resolves it directly.
-      - name: Prefer the Xcode toolchain libtool
-        run: dirname "$(xcrun -find libtool)" >> "$GITHUB_PATH"
+      # Arrow's arrow_create_merged_static_lib validates `libtool -V` output
+      # matches cctools; under the iOS cross-compile context on Xcode 26.5
+      # images the /usr/bin/libtool xcrun shim fails that check ("libtool
+      # found appears not to be Apple's libtool", apache/arrow#44384 class).
+      # PATH can't help: Arrow's find_program uses HINTS /usr/bin, which
+      # outranks PATH. Arrow DOES honor an explicit -DCMAKE_LIBTOOL override
+      # (BuildUtils.cmake), so inject the host toolchain libtool into zvec's
+      # iOS Arrow sub-configure (thirdparty/arrow/CMakeLists.txt:99).
+      - name: Point Arrow at the host toolchain libtool
+        if: steps.zvec-cache.outputs.cache-hit != 'true'
+        run: |
+          LIBTOOL_HOST="$(xcrun --sdk macosx -find libtool)"
+          perl -pi -e "s|-DCMAKE_SYSTEM_NAME=iOS |-DCMAKE_LIBTOOL=$LIBTOOL_HOST -DCMAKE_SYSTEM_NAME=iOS |" _zvec/thirdparty/arrow/CMakeLists.txt
+          grep -q "CMAKE_LIBTOOL" _zvec/thirdparty/arrow/CMakeLists.txt
 
       - name: Patch zvec iOS static library names
         if: steps.zvec-cache.outputs.cache-hit != 'true'

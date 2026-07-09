@@ -16,6 +16,7 @@ const CHECKSUMS: &[(&str, &str)] = &[
     ("x86_64-apple-darwin", "f366baa4dd2b5b04d3f29728fc076fe83dcd1ee443032e336096709c211679df"),
     ("aarch64-apple-darwin", "05141fc1576f0e95b0295c8b07b4bb2e781a8f2d2478f217ddaf7403de2ed8e3"),
     ("aarch64-apple-ios", "e3f3c5a89a4d242c05daa93a1fdae3b5fd47e9930a33fefdd9b762d2b6aeeed7"),
+    ("aarch64-apple-ios-sim", ""),
     ("x86_64-pc-windows-msvc", "72a31705b4b416212142b72f95edd13257102b643f48a5bfe992d9b71763214e"),
     ("aarch64-linux-android", "e8720e8bdad3ededab88b77041a73c329e6d603274bcce7fc65f5c906c696c38"),
     ("x86_64-linux-android", "09eb1430ec7d90b6a40cb35584a54aedfa85a428a44cc380fb7ed6dd462dad60"),
@@ -25,18 +26,38 @@ fn target_triple() -> String {
     let arch = env::var("CARGO_CFG_TARGET_ARCH").unwrap();
     let os = env::var("CARGO_CFG_TARGET_OS").unwrap();
     let env = env::var("CARGO_CFG_TARGET_ENV").unwrap_or_default();
+    // `aarch64-apple-ios` (device) and `aarch64-apple-ios-sim` (simulator)
+    // share arch/os/env and differ only by ABI. Their dylibs are NOT
+    // interchangeable — ld rejects a device dylib in a simulator link
+    // ("building for 'iOS-simulator', but linking in dylib built for
+    // 'iOS'"), so the simulator needs its own vendor archive.
+    let abi = env::var("CARGO_CFG_TARGET_ABI").unwrap_or_default();
 
     match (arch.as_str(), os.as_str(), env.as_str()) {
         ("x86_64", "linux", "gnu") => "x86_64-unknown-linux-gnu".into(),
         ("aarch64", "linux", "gnu") => "aarch64-unknown-linux-gnu".into(),
         ("x86_64", "macos", _) => "x86_64-apple-darwin".into(),
         ("aarch64", "macos", _) => "aarch64-apple-darwin".into(),
+        ("aarch64", "ios", _) if abi == "sim" => "aarch64-apple-ios-sim".into(),
         ("aarch64", "ios", _) => "aarch64-apple-ios".into(),
         ("x86_64", "windows", "msvc") => "x86_64-pc-windows-msvc".into(),
         ("aarch64", "android", _) => "aarch64-linux-android".into(),
         ("x86_64", "android", _) => "x86_64-linux-android".into(),
         _ => panic!("unsupported target: {arch}-{os}-{env}"),
     }
+}
+
+/// Resolve an Apple SDK path via `xcrun --sdk <sdk> --show-sdk-path`.
+fn apple_sdk_path(sdk: &str) -> Option<String> {
+    let output = std::process::Command::new("xcrun")
+        .args(["--sdk", sdk, "--show-sdk-path"])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let path = String::from_utf8(output.stdout).ok()?.trim().to_string();
+    if path.is_empty() { None } else { Some(path) }
 }
 
 fn lib_filename(os: &str) -> &'static str {
@@ -166,14 +187,27 @@ fn main() {
     println!("cargo:rerun-if-changed={header}");
     println!("cargo:rerun-if-changed=build.rs");
 
-    let bindings = bindgen::Builder::default()
+    let mut builder = bindgen::Builder::default()
         .header(header)
         .allowlist_function("zvec_.*")
         .allowlist_type("ZVec.*")
         .allowlist_var("ZVEC_.*")
-        .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
-        .generate()
-        .expect("failed to generate bindings");
+        .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()));
+
+    // bindgen forwards the raw Rust target triple to libclang, which rejects
+    // the `-sim` suffix ("version 'sim' in target triple ... is invalid")
+    // and, without a sysroot, fails to find libc headers (<stdbool.h>).
+    // Hand it the LLVM-style simulator triple + the iphonesimulator SDK
+    // sysroot explicitly. The device triple (`aarch64-apple-ios`) is a valid
+    // clang triple and needs neither.
+    if triple == "aarch64-apple-ios-sim" {
+        builder = builder.clang_arg("--target=arm64-apple-ios-simulator");
+        if let Some(sysroot) = apple_sdk_path("iphonesimulator") {
+            builder = builder.clang_arg(format!("--sysroot={sysroot}"));
+        }
+    }
+
+    let bindings = builder.generate().expect("failed to generate bindings");
 
     let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
     bindings

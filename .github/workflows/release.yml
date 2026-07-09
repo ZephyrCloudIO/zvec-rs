@@ -87,6 +87,9 @@ jobs:
           - target: aarch64-apple-ios
             os: macos-latest
             cmake_extra: "-DCMAKE_SYSTEM_NAME=iOS -DCMAKE_OSX_DEPLOYMENT_TARGET=13.0 -DCMAKE_OSX_ARCHITECTURES=arm64 -DIOS=ON"
+          - target: aarch64-apple-ios-sim
+            os: macos-latest
+            cmake_extra: "-DCMAKE_SYSTEM_NAME=iOS -DCMAKE_OSX_DEPLOYMENT_TARGET=13.0 -DCMAKE_OSX_ARCHITECTURES=arm64 -DIOS=ON"
           - target: x86_64-pc-windows-msvc
             os: windows-latest
             cmake_extra: ""
@@ -126,7 +129,7 @@ jobs:
           sudo apt-get install -y libaio-dev
 
       - name: Patch zvec iOS static library names
-        if: matrix.target == 'aarch64-apple-ios'
+        if: startsWith(matrix.target, 'aarch64-apple-ios')
         shell: bash
         run: |
           perl -0pi -e 's/if\(NOT MSVC\)\n    set_property\(TARGET \$\{_NAME\}_static PROPERTY OUTPUT_NAME \$\{_NAME\}\)\n  endif\(\)/if(NOT MSVC AND NOT IOS)\n    set_property(TARGET \${_NAME}_static PROPERTY OUTPUT_NAME \${_NAME})\n  endif()/g' _zvec/cmake/bazel.cmake
@@ -152,7 +155,7 @@ jobs:
       # so patches applied here don't conflict with the cross-compile build.
       # iOS is also a cross-compile and cannot use a target-built protoc.
       - name: Build host protoc
-        if: contains(matrix.target, 'android') || matrix.target == 'aarch64-apple-ios'
+        if: contains(matrix.target, 'android') || startsWith(matrix.target, 'aarch64-apple-ios')
         shell: bash
         run: |
           cp -r _zvec _zvec-host
@@ -165,11 +168,16 @@ jobs:
           EXTRA="${{ matrix.cmake_extra }}"
           PROTOC_FLAG=""
           SDK_FLAG=""
-          if [[ "${{ matrix.target }}" == *-linux-android ]] || [ "${{ matrix.target }}" = "aarch64-apple-ios" ]; then
+          if [[ "${{ matrix.target }}" == *-linux-android ]] || [[ "${{ matrix.target }}" == aarch64-apple-ios* ]]; then
             PROTOC_FLAG="-DGLOBAL_CC_PROTOBUF_PROTOC=${{ github.workspace }}/_zvec-host/build/bin/protoc"
           fi
+          # Device vs simulator differ only by which iOS SDK sysroot CMake
+          # targets — this is what stamps the dylib's platform (device builds
+          # cannot link into a simulator app and vice versa).
           if [ "${{ matrix.target }}" = "aarch64-apple-ios" ]; then
             SDK_FLAG="-DCMAKE_OSX_SYSROOT=$(xcrun --sdk iphoneos --show-sdk-path)"
+          elif [ "${{ matrix.target }}" = "aarch64-apple-ios-sim" ]; then
+            SDK_FLAG="-DCMAKE_OSX_SYSROOT=$(xcrun --sdk iphonesimulator --show-sdk-path)"
           fi
           cmake -S _zvec -B _zvec/build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \

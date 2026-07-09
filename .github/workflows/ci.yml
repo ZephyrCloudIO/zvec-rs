@@ -254,6 +254,15 @@ jobs:
             Windows) choco install ninja -y ;;
           esac
 
+      # Arrow's arrow_create_merged_static_lib validates that `libtool` is
+      # Apple's. /usr/bin/libtool is an xcrun SHIM which fails that check
+      # under the iOS cross-compile SDK context on Xcode 26.5 images
+      # ("libtool found appears not to be Apple's libtool", apache/arrow
+      # #44384) — put the toolchain's real libtool first on PATH so CMake's
+      # find_program resolves it directly.
+      - name: Prefer the Xcode toolchain libtool
+        run: dirname "$(xcrun -find libtool)" >> "$GITHUB_PATH"
+
       - name: Patch zvec iOS static library names
         if: steps.zvec-cache.outputs.cache-hit != 'true'
         run: |

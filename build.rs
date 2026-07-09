@@ -48,16 +48,31 @@ fn target_triple() -> String {
 }
 
 /// Resolve an Apple SDK path via `xcrun --sdk <sdk> --show-sdk-path`.
-fn apple_sdk_path(sdk: &str) -> Option<String> {
+/// Returns the resolver's own diagnostic on failure so a misconfigured
+/// Xcode/Command-Line-Tools install surfaces its real cause (xcrun writes
+/// "SDK ... cannot be located" to stderr) rather than a downstream clang error.
+fn apple_sdk_path(sdk: &str) -> Result<String, String> {
     let output = std::process::Command::new("xcrun")
         .args(["--sdk", sdk, "--show-sdk-path"])
         .output()
-        .ok()?;
+        .map_err(|e| format!("failed to run xcrun: {e}"))?;
     if !output.status.success() {
-        return None;
+        return Err(format!(
+            "xcrun --sdk {sdk} --show-sdk-path failed: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        ));
     }
-    let path = String::from_utf8(output.stdout).ok()?.trim().to_string();
-    if path.is_empty() { None } else { Some(path) }
+    let path = String::from_utf8(output.stdout)
+        .map_err(|e| e.to_string())?
+        .trim()
+        .to_string();
+    if path.is_empty() {
+        Err(format!(
+            "xcrun --sdk {sdk} --show-sdk-path returned an empty path"
+        ))
+    } else {
+        Ok(path)
+    }
 }
 
 fn lib_filename(os: &str) -> &'static str {
@@ -201,10 +216,19 @@ fn main() {
     // sysroot explicitly. The device triple (`aarch64-apple-ios`) is a valid
     // clang triple and needs neither.
     if triple == "aarch64-apple-ios-sim" {
-        builder = builder.clang_arg("--target=arm64-apple-ios-simulator");
-        if let Some(sysroot) = apple_sdk_path("iphonesimulator") {
-            builder = builder.clang_arg(format!("--sysroot={sysroot}"));
-        }
+        // --target and --sysroot are applied together: a target with no
+        // sysroot is a known-broken half-configuration (bindgen can't find
+        // <stdbool.h>), so fail loud with xcrun's own reason instead.
+        let sysroot = apple_sdk_path("iphonesimulator").unwrap_or_else(|e| {
+            panic!(
+                "cannot resolve the iphonesimulator SDK sysroot for bindgen: {e}\n\
+                 install Xcode + the iOS Simulator platform, or run \
+                 `xcodebuild -runFirstLaunch`"
+            )
+        });
+        builder = builder
+            .clang_arg("--target=arm64-apple-ios-simulator")
+            .clang_arg(format!("--sysroot={sysroot}"));
     }
 
     let bindings = builder.generate().expect("failed to generate bindings");

@@ -146,7 +146,12 @@ jobs:
           path: zvec_c_api-x86_64-linux-android.tar.gz
 
   ios:
-    runs-on: macos-latest
+    # Pinned to macos-15 (Xcode 16.x): the macos-latest migration to
+    # macos-26 / Xcode 26.5 broke Apache Arrow 21.0.0's iOS cross-compile
+    # configure (this job was green on macos-15-arm64 through 2026-06-22 and
+    # started failing only on the macos-26-arm64 image). Revisit once Arrow's
+    # iOS build supports Xcode 26.x.
+    runs-on: macos-15
     env:
       ZVEC_REPO: alibaba/zvec
       ZVEC_REV: v0.5.0
@@ -170,8 +175,8 @@ jobs:
           perl -0pi -e 's/if\(NOT MSVC\)\n    set_property\(TARGET \$\{_NAME\}_static PROPERTY OUTPUT_NAME \$\{_NAME\}\)\n  endif\(\)/if(NOT MSVC AND NOT IOS)\n    set_property(TARGET \${_NAME}_static PROPERTY OUTPUT_NAME \${_NAME})\n  endif()/g' _zvec/cmake/bazel.cmake
           grep -q 'if(NOT MSVC AND NOT IOS)' _zvec/cmake/bazel.cmake
 
-      - name: Add Rust iOS target
-        run: rustup target add aarch64-apple-ios
+      - name: Add Rust iOS targets
+        run: rustup target add aarch64-apple-ios aarch64-apple-ios-sim
 
       - name: Build host protoc
         run: |
@@ -199,6 +204,35 @@ jobs:
 
       - name: Check Rust bindings for iOS
         run: ZVEC_LIB_DIR="$GITHUB_WORKSPACE/_zvec/build/lib" cargo check -p zvec --target aarch64-apple-ios --locked
+
+      # Simulator gets its own C build (different SDK sysroot -> different
+      # platform stamp; a device dylib will not link into a simulator app).
+      # Reuses the already-built host protoc and the already-patched _zvec
+      # source; only the SDK + output dir differ.
+      - name: Build zvec C API for iOS Simulator
+        run: |
+          SDK_PATH=$(xcrun --sdk iphonesimulator --show-sdk-path)
+          NPROC=$(sysctl -n hw.ncpu)
+          cmake -S _zvec -B _zvec/build-sim -G Ninja \
+            -DCMAKE_SYSTEM_NAME=iOS \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=13.0 \
+            -DCMAKE_OSX_ARCHITECTURES=arm64 \
+            -DCMAKE_OSX_SYSROOT="$SDK_PATH" \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+            -DBUILD_C_BINDINGS=ON \
+            -DBUILD_PYTHON_BINDINGS=OFF \
+            -DBUILD_TOOLS=OFF \
+            -DGLOBAL_CC_PROTOBUF_PROTOC="$GITHUB_WORKSPACE/_zvec-host/build/bin/protoc" \
+            -DIOS=ON
+          cmake --build _zvec/build-sim --target zvec_c_api --parallel "$NPROC"
+
+      # Exercises the build.rs simulator paths this repo added: the
+      # CARGO_CFG_TARGET_ABI == "sim" branch in target_triple(), apple_sdk_path
+      # resolving the iphonesimulator SDK, and the bindgen --target/--sysroot
+      # override (without which bindgen rejects the -sim triple).
+      - name: Check Rust bindings for iOS Simulator
+        run: ZVEC_LIB_DIR="$GITHUB_WORKSPACE/_zvec/build-sim/lib" cargo check -p zvec --target aarch64-apple-ios-sim --locked
 
       - name: Package iOS artifact smoke
         run: |

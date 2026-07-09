@@ -84,11 +84,14 @@ jobs:
           - target: aarch64-apple-darwin
             os: macos-latest
             cmake_extra: "-DCMAKE_OSX_DEPLOYMENT_TARGET=11.0"
+          # Pinned to macos-15 (Xcode 16.x): Apache Arrow 21.0.0's iOS
+          # cross-compile configure breaks on the macos-26 / Xcode 26.5 image
+          # that macos-latest now points at (see the ci.yml ios job note).
           - target: aarch64-apple-ios
-            os: macos-latest
+            os: macos-15
             cmake_extra: "-DCMAKE_SYSTEM_NAME=iOS -DCMAKE_OSX_DEPLOYMENT_TARGET=13.0 -DCMAKE_OSX_ARCHITECTURES=arm64 -DIOS=ON"
           - target: aarch64-apple-ios-sim
-            os: macos-latest
+            os: macos-15
             cmake_extra: "-DCMAKE_SYSTEM_NAME=iOS -DCMAKE_OSX_DEPLOYMENT_TARGET=13.0 -DCMAKE_OSX_ARCHITECTURES=arm64 -DIOS=ON"
           - target: x86_64-pc-windows-msvc
             os: windows-latest

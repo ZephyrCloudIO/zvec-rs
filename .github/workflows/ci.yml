@@ -146,7 +146,12 @@ jobs:
           path: zvec_c_api-x86_64-linux-android.tar.gz
 
   ios:
-    runs-on: macos-latest
+    # Pinned to macos-15 (Xcode 16.x): the macos-latest migration to
+    # macos-26 / Xcode 26.5 broke Apache Arrow 21.0.0's iOS cross-compile
+    # configure (this job was green on macos-15-arm64 through 2026-06-22 and
+    # started failing only on the macos-26-arm64 image). Revisit once Arrow's
+    # iOS build supports Xcode 26.x.
+    runs-on: macos-15
     env:
       ZVEC_REPO: alibaba/zvec
       ZVEC_REV: v0.5.0

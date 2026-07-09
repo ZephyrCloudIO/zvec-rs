@@ -102,7 +102,17 @@ jobs:
 
       - name: Install Ninja
         if: steps.zvec-cache.outputs.cache-hit != 'true'
-        uses: seanmiddleditch/gha-setup-ninja@v6
+        shell: bash
+        # Native package managers instead of gha-setup-ninja: that action
+        # flakes on corrupt zip downloads ("Invalid or unsupported zip
+        # format", seen live 2026-07-09) and its runtime targets deprecated
+        # Node 20. brew/apt/choco are preinstalled on all GitHub runners.
+        run: |
+          case "$RUNNER_OS" in
+            macOS) brew install ninja ;;
+            Linux) sudo apt-get install -y ninja-build || { sudo apt-get update && sudo apt-get install -y ninja-build; } ;;
+            Windows) choco install ninja -y ;;
+          esac
 
       # NDK stays unconditional: the cargo build below needs its linker and
       # bindgen sysroot even on a cache hit.
@@ -220,7 +230,17 @@ jobs:
 
       - name: Install Ninja
         if: steps.zvec-cache.outputs.cache-hit != 'true'
-        uses: seanmiddleditch/gha-setup-ninja@v6
+        shell: bash
+        # Native package managers instead of gha-setup-ninja: that action
+        # flakes on corrupt zip downloads ("Invalid or unsupported zip
+        # format", seen live 2026-07-09) and its runtime targets deprecated
+        # Node 20. brew/apt/choco are preinstalled on all GitHub runners.
+        run: |
+          case "$RUNNER_OS" in
+            macOS) brew install ninja ;;
+            Linux) sudo apt-get install -y ninja-build || { sudo apt-get update && sudo apt-get install -y ninja-build; } ;;
+            Windows) choco install ninja -y ;;
+          esac
 
       - name: Patch zvec iOS static library names
         if: steps.zvec-cache.outputs.cache-hit != 'true'

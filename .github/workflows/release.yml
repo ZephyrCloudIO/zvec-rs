@@ -81,6 +81,12 @@ jobs:
           - target: x86_64-apple-darwin
             os: macos-15-intel
             cmake_extra: "-DENABLE_NATIVE=OFF -DCMAKE_CXX_FLAGS=-march=x86-64-v2 -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0"
+          # NOTE: left on macos-latest (now macos-26 / Xcode 26.5). Unlike the
+          # iOS entries below, this is a NATIVE macOS Arrow build (no
+          # -DCMAKE_SYSTEM_NAME=iOS cross-compile), so the Xcode-26.5 Arrow-iOS
+          # break does not obviously apply — but it is unverified (no CI job
+          # exercises the darwin-from-source build). Pin to macos-15 too if a
+          # release run fails here.
           - target: aarch64-apple-darwin
             os: macos-latest
             cmake_extra: "-DCMAKE_OSX_DEPLOYMENT_TARGET=11.0"
@@ -268,10 +274,22 @@ jobs:
             -e 's|("x86_64-apple-darwin", "[^"]*")|("x86_64-apple-darwin", "${{ steps.checksums.outputs.x86_64_apple_darwin }}")|' \
             -e 's|("aarch64-apple-darwin", "[^"]*")|("aarch64-apple-darwin", "${{ steps.checksums.outputs.aarch64_apple_darwin }}")|' \
             -e 's|("aarch64-apple-ios", "[^"]*")|("aarch64-apple-ios", "${{ steps.checksums.outputs.aarch64_apple_ios }}")|' \
+            -e 's|("aarch64-apple-ios-sim", "[^"]*")|("aarch64-apple-ios-sim", "${{ steps.checksums.outputs.aarch64_apple_ios_sim }}")|' \
             -e 's|("x86_64-pc-windows-msvc", "[^"]*")|("x86_64-pc-windows-msvc", "${{ steps.checksums.outputs.x86_64_pc_windows_msvc }}")|' \
             -e 's|("aarch64-linux-android", "[^"]*")|("aarch64-linux-android", "${{ steps.checksums.outputs.aarch64_linux_android }}")|' \
             -e 's|("x86_64-linux-android", "[^"]*")|("x86_64-linux-android", "${{ steps.checksums.outputs.x86_64_linux_android }}")|' \
             build.rs
+
+      # Guard: fail the release if any CHECKSUMS entry is still an empty
+      # placeholder after the rewrite — catches a target added to the table
+      # (and to the build matrix) but missing its sed line above, which would
+      # otherwise ship an unbuildable target with an empty checksum.
+      - name: Verify no empty checksums remain
+        run: |
+          if grep -nE '\("[^"]+", ""\)' build.rs; then
+            echo "::error::A CHECKSUMS entry above still has an empty hash after the rewrite — add its sed line to 'Update build.rs checksums'." >&2
+            exit 1
+          fi
 
       - name: Bump version in Cargo.toml
         run: |

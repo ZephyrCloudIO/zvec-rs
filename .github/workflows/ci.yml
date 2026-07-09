@@ -262,28 +262,21 @@ jobs:
       # outranks PATH. Arrow DOES honor an explicit -DCMAKE_LIBTOOL override
       # (BuildUtils.cmake), so inject the host toolchain libtool into zvec's
       # iOS Arrow sub-configure (thirdparty/arrow/CMakeLists.txt:99).
-      - name: Point Arrow at the host toolchain libtool
+      # Xcode 26.5's libtool -V prints "Apple Inc. version cctools_ld-1267"
+      # (captured live, probe round 4); Arrow 21's stock validation regex
+      # `cctools-([0-9.]+)` no longer matches it. zvec upstream already fixed
+      # this in arrow.patch — the copy applied to HOST builds — by loosening
+      # the regex to `cctools[-_a-z]*([0-9.]+)`, but never ported the hunk to
+      # arrow.ios.patch, so iOS cross-builds still die on Xcode 26.5 images.
+      # Port the exact upstream hunk (arrow.patch lines 1-13 = its
+      # BuildUtils.cmake diff) into the iOS patch file before configure.
+      - name: Port zvec's libtool-regex fix into arrow.ios.patch
         if: steps.zvec-cache.outputs.cache-hit != 'true'
         run: |
-          LIBTOOL_HOST="$(xcrun --sdk macosx -find libtool)"
-          # PROBE EVIDENCE: what does this Xcode's libtool -V actually print?
-          # Arrow validates it against the regex `cctools-([0-9.]+)`; round 3
-          # proved the genuine toolchain binary fails that check on Xcode
-          # 26.5 — capture the exact output for the upstream report.
-          echo "--- $LIBTOOL_HOST -V ---"
-          "$LIBTOOL_HOST" -V 2>&1 || true
-          echo "--- /usr/bin/libtool -V ---"
+          echo "--- evidence: this image's libtool -V ---"
           /usr/bin/libtool -V 2>&1 || true
-          perl -pi -e "s|-DCMAKE_SYSTEM_NAME=iOS |-DCMAKE_LIBTOOL=$LIBTOOL_HOST -DCMAKE_SYSTEM_NAME=iOS |" _zvec/thirdparty/arrow/CMakeLists.txt
-          grep -q "CMAKE_LIBTOOL" _zvec/thirdparty/arrow/CMakeLists.txt
-          # Arrow's cctools-version regex is cosmetic — the match result is
-          # never used; LIBTOOL_MACOS feeds the bundle command as-is. Arrow
-          # source is VENDORED in zvec (DOWNLOAD_COMMAND ""), so downgrade
-          # the FATAL_ERROR in place and let the build reach the real
-          # functional test: can this libtool merge the static libs?
-          perl -pi -e 's|message\(FATAL_ERROR "libtool found appears|message(WARNING "libtool found appears|' \
-            _zvec/thirdparty/arrow/apache-arrow-21.0.0/cpp/cmake_modules/BuildUtils.cmake
-          grep -q 'WARNING "libtool found appears' _zvec/thirdparty/arrow/apache-arrow-21.0.0/cpp/cmake_modules/BuildUtils.cmake
+          sed -n '1,13p' _zvec/thirdparty/arrow/arrow.patch >> _zvec/thirdparty/arrow/arrow.ios.patch
+          grep -qF 'cctools[-_a-z]*' _zvec/thirdparty/arrow/arrow.ios.patch
 
       - name: Patch zvec iOS static library names
         if: steps.zvec-cache.outputs.cache-hit != 'true'

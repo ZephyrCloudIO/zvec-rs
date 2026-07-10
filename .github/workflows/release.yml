@@ -30,7 +30,7 @@ env:
   # share cache keys so releases reuse the C API builds CI keeps warm. Bump
   # BOTH together whenever any C-build flag, patch script, or toolchain pin
   # changes.
-  ZVEC_CACHE_VERSION: "v1"
+  ZVEC_CACHE_VERSION: "v2"
 
 jobs:
   prepare:
@@ -86,23 +86,21 @@ jobs:
           - target: x86_64-apple-darwin
             os: macos-15-intel
             cmake_extra: "-DENABLE_NATIVE=OFF -DCMAKE_CXX_FLAGS=-march=x86-64-v2 -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0"
-          # NOTE: left on macos-latest (now macos-26 / Xcode 26.5). Unlike the
-          # iOS entries below, this is a NATIVE macOS Arrow build (no
-          # -DCMAKE_SYSTEM_NAME=iOS cross-compile), so the Xcode-26.5 Arrow-iOS
-          # break does not obviously apply — but it is unverified (no CI job
-          # exercises the darwin-from-source build). Pin to macos-15 too if a
-          # release run fails here.
+          # NOTE: native macOS Arrow builds apply zvec's arrow.patch, which
+          # already carries the loosened libtool-version regex — the
+          # Xcode-26.5 break only ever affected arrow.ios.patch (see the
+          # port step below).
           - target: aarch64-apple-darwin
             os: macos-latest
             cmake_extra: "-DCMAKE_OSX_DEPLOYMENT_TARGET=11.0"
-          # Pinned to macos-15 (Xcode 16.x): Apache Arrow 21.0.0's iOS
-          # cross-compile configure breaks on the macos-26 / Xcode 26.5 image
-          # that macos-latest now points at (see the ci.yml ios job note).
+          # Un-pinned from macos-15 (2026-07-10): the Xcode 26.5 Arrow-iOS
+          # configure break is fixed by the "Port zvec's libtool-regex fix"
+          # step below (see the ci.yml ios-build job note for the root cause).
           - target: aarch64-apple-ios
-            os: macos-15
+            os: macos-latest
             cmake_extra: "-DCMAKE_SYSTEM_NAME=iOS -DCMAKE_OSX_DEPLOYMENT_TARGET=13.0 -DCMAKE_OSX_ARCHITECTURES=arm64 -DIOS=ON"
           - target: aarch64-apple-ios-sim
-            os: macos-15
+            os: macos-latest
             cmake_extra: "-DCMAKE_SYSTEM_NAME=iOS -DCMAKE_OSX_DEPLOYMENT_TARGET=13.0 -DCMAKE_OSX_ARCHITECTURES=arm64 -DIOS=ON"
           - target: x86_64-pc-windows-msvc
             os: windows-latest
@@ -167,6 +165,17 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libaio-dev
+
+      # Same fix as ci.yml's ios-build job — see the comment there for the
+      # full root cause (Xcode 26.5 renamed libtool's version string; zvec's
+      # arrow.ios.patch is missing the loosened-regex hunk that its
+      # arrow.patch already has).
+      - name: Port zvec's libtool-regex fix into arrow.ios.patch
+        if: startsWith(matrix.target, 'aarch64-apple-ios') && steps.zvec-cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          sed -n '1,13p' _zvec/thirdparty/arrow/arrow.patch >> _zvec/thirdparty/arrow/arrow.ios.patch
+          grep -qF 'cctools[-_a-z]*' _zvec/thirdparty/arrow/arrow.ios.patch
 
       - name: Patch zvec iOS static library names
         if: startsWith(matrix.target, 'aarch64-apple-ios') && steps.zvec-cache.outputs.cache-hit != 'true'

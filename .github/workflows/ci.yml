@@ -21,7 +21,7 @@ env:
   # keeps warm (and vice versa). BUMP THIS whenever any C-build flag, patch
   # script, or toolchain pin changes; the pinned ZVEC_REV in the key handles
   # source changes.
-  ZVEC_CACHE_VERSION: "v1"
+  ZVEC_CACHE_VERSION: "v2"
 
 jobs:
   smoke-test:
@@ -200,12 +200,13 @@ jobs:
   # entirely). The `ios` job below aggregates them so the branch-protection
   # required-check context "ios" is unchanged.
   ios-build:
-    # Pinned to macos-15 (Xcode 16.x): the macos-latest migration to
-    # macos-26 / Xcode 26.5 broke Apache Arrow 21.0.0's iOS cross-compile
-    # configure (this job was green on macos-15-arm64 through 2026-06-22 and
-    # started failing only on the macos-26-arm64 image). Revisit once Arrow's
-    # iOS build supports Xcode 26.x.
-    runs-on: macos-15
+    # Un-pinned from macos-15 (2026-07-10): the macos-26 / Xcode 26.5 Arrow
+    # break is fixed by the "Port zvec's libtool-regex fix" step below. Root
+    # cause: Xcode 26.5's `libtool -V` renamed its version string to
+    # "cctools_ld-NNNN", which Arrow 21's stock validation regex rejects.
+    # The port step is a no-op hazard-wise on older images, so this job runs
+    # green on both macos-15 (Xcode 16) and macos-26 (Xcode 26.5).
+    runs-on: macos-latest
     strategy:
       fail-fast: false
       matrix:
@@ -253,6 +254,25 @@ jobs:
             Linux) sudo apt-get install -y ninja-build || { sudo apt-get update && sudo apt-get install -y ninja-build; } ;;
             Windows) choco install ninja -y ;;
           esac
+
+      # Xcode 26.5's `libtool -V` prints "Apple Inc. version cctools_ld-1267"
+      # (captured live, 2026-07-09); Arrow 21's stock validation regex
+      # `cctools-([0-9.]+)` in arrow_create_merged_static_lib rejects it and
+      # FATAL_ERRORs the iOS cross-compile configure. zvec upstream already
+      # loosened the regex to `cctools[-_a-z]*([0-9.]+)` in arrow.patch (the
+      # copy applied to HOST builds) but never ported the hunk to
+      # arrow.ios.patch — hence host builds pass while iOS builds fail on
+      # Xcode >= 26.5. Port the identical upstream hunk (arrow.patch lines
+      # 1-13 = its BuildUtils.cmake diff) into the iOS patch pre-configure.
+      # Harmless on older images (cctools-1030.x also matches the loosened
+      # regex). Drop once upstream zvec ships the hunk in arrow.ios.patch.
+      - name: Port zvec's libtool-regex fix into arrow.ios.patch
+        if: steps.zvec-cache.outputs.cache-hit != 'true'
+        run: |
+          echo "--- evidence: this image's libtool -V ---"
+          /usr/bin/libtool -V 2>&1 || true
+          sed -n '1,13p' _zvec/thirdparty/arrow/arrow.patch >> _zvec/thirdparty/arrow/arrow.ios.patch
+          grep -qF 'cctools[-_a-z]*' _zvec/thirdparty/arrow/arrow.ios.patch
 
       - name: Patch zvec iOS static library names
         if: steps.zvec-cache.outputs.cache-hit != 'true'

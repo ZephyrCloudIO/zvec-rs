@@ -21,7 +21,7 @@ env:
   # keeps warm (and vice versa). BUMP THIS whenever any C-build flag, patch
   # script, or toolchain pin changes; the pinned ZVEC_REV in the key handles
   # source changes.
-  ZVEC_CACHE_VERSION: "v2"
+  ZVEC_CACHE_VERSION: "v3"
 
 jobs:
   smoke-test:

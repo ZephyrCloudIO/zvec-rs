@@ -30,7 +30,7 @@ env:
   # share cache keys so releases reuse the C API builds CI keeps warm. Bump
   # BOTH together whenever any C-build flag, patch script, or toolchain pin
   # changes.
-  ZVEC_CACHE_VERSION: "v2"
+  ZVEC_CACHE_VERSION: "v3"
 
 jobs:
   prepare:

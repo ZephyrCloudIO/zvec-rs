@@ -261,6 +261,13 @@ jobs:
           New-Item -ItemType Directory -Force staging
           Copy-Item "_zvec/build/bin/*.dll" staging/
           Copy-Item "_zvec/build/lib/*.lib" staging/
+          $importLibrary = "_zvec/build/bin/zvec_c_api.lib"
+          if (-not (Test-Path -LiteralPath $importLibrary)) {
+            throw "zvec C API build did not produce $importLibrary"
+          }
+          Copy-Item $importLibrary staging/
+          $env:ZVEC_LIB_DIR = (Resolve-Path staging)
+          cargo build -p zvec --example basic --locked
           tar -czf "zvec_c_api-${{ matrix.target }}.tar.gz" -C staging .
 
       - name: Package (macOS)

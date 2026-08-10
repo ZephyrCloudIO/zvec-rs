@@ -83,6 +83,14 @@ fn lib_filename(os: &str) -> &'static str {
     }
 }
 
+fn import_library_filename(os: &str) -> &'static str {
+    match os {
+        "windows" => "zvec_c_api.lib",
+        "macos" | "ios" => "libzvec_c_api.dylib",
+        _ => "libzvec_c_api.so",
+    }
+}
+
 fn checksum_for_target(triple: &str) -> &'static str {
     CHECKSUMS
         .iter()
@@ -214,6 +222,13 @@ fn main() {
 
         vendor_dir
     };
+
+    let import_library = lib_dir.join(import_library_filename(&os));
+    assert!(
+        import_library.is_file(),
+        "zvec vendor archive is missing the expected import library: {}",
+        import_library.display()
+    );
 
     println!("cargo:rustc-link-search=native={}", lib_dir.display());
     println!("cargo:rustc-link-lib=dylib=zvec_c_api");

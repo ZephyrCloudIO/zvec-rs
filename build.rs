@@ -11,15 +11,15 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 // update the checksums for new releases by replacing the old ones in-place.
 #[rustfmt::skip]
 const CHECKSUMS: &[(&str, &str)] = &[
-    ("x86_64-unknown-linux-gnu", "ba8819db48a97f2d8cd28f25c8fe99332c0b0bd87053ad5e7f20b259fb41c82c"),
-    ("aarch64-unknown-linux-gnu", "839e486a97e9b7ea3cce1b120e083c35b2281814fa0cb32481cac68fb9600b2e"),
-    ("x86_64-apple-darwin", "2caeef633fb23a3ba45df2e59cb2f7d0ec10a95d545c21b19deba2fe57a574c0"),
-    ("aarch64-apple-darwin", "00b626ca8737b084f2c128a80f0f2e8f73f5112c6310483a23793afed3a0aaaa"),
-    ("aarch64-apple-ios", "551705765c6cb191724df597071fdec09a1db099c73f02974e163040287b9811"),
-    ("aarch64-apple-ios-sim", "a6f2820beb54dc2ea0c9a2776385d8078e2cbf5ca5a2c4456cb6279f38321a72"),
-    ("x86_64-pc-windows-msvc", "229e65308285829b96203b58ed6617f758c8ee5f1fcf1ea9c4be39481f3be767"),
-    ("aarch64-linux-android", "a7b99d276d69b94e111845a912bb37dcf4bcf8b6ec2611c9a9222c8f29b94082"),
-    ("x86_64-linux-android", "9c85a191e627b3c80e0f19ec72f57c5e20a5065b206345c1f818fde5dc0aaa9b"),
+    ("x86_64-unknown-linux-gnu", "890ede2aead9125e8909de84815db62263fb02c76ed467e524bd9d9527f7aac7"),
+    ("aarch64-unknown-linux-gnu", "06614c72c38daf5ad7fdd52182a793b37a660b482cf7948a59eb62849b937625"),
+    ("x86_64-apple-darwin", "2d5e2fa40f44fa07c0f271bbcda9af68c1371b1f5d2ff6536d99a7eff63e3ce9"),
+    ("aarch64-apple-darwin", "6c74981b7d6327e1a1c320bba33694523ee902d789fff3bd4c96b9d3c0f15e30"),
+    ("aarch64-apple-ios", "c4f900d6eba55fa52eaa0687c53de48417c745f0165b61e2d86ca8815ff59b8f"),
+    ("aarch64-apple-ios-sim", "b69afdc5454b5a8f20162abfddde053ec8fcb06b076e8d5af47237ab5906cb92"),
+    ("x86_64-pc-windows-msvc", "965d573b49453f57166d72e6510b47027502e3373d6f9e8eeabc07fd22279a79"),
+    ("aarch64-linux-android", "19132201f86a007275662320b6c73bd6821e793782b1098603bd7239c175f7d4"),
+    ("x86_64-linux-android", "607df316ae9f4196afee3d9b6275e65ee9c67c7e5af522b26ed863074ca47840"),
 ];
 
 fn target_triple() -> String {

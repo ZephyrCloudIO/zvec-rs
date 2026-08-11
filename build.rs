@@ -204,10 +204,11 @@ fn main() {
 
         let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
         let vendor_dir = out_dir.join("vendor");
-        let lib_file = vendor_dir.join(lib_filename(&os));
+        let runtime_library = vendor_dir.join(lib_filename(&os));
+        let import_library = vendor_dir.join(import_library_filename(&os));
 
-        // Skip download if already extracted
-        if !lib_file.exists() {
+        // A partial extraction must self-heal instead of poisoning this OUT_DIR.
+        if !runtime_library.is_file() || !import_library.is_file() {
             let archive_name = format!("zvec_c_api-{triple}.tar.gz");
             let tag = format!("v{VERSION}");
             let url = format!("https://github.com/{REPO}/releases/download/{tag}/{archive_name}");
@@ -215,20 +216,25 @@ fn main() {
             let archive_path = out_dir.join(&archive_name);
             download_and_verify(&url, &expected_sha256, &archive_path);
 
-            let _ = fs::create_dir_all(&vendor_dir);
+            if vendor_dir.exists() {
+                fs::remove_dir_all(&vendor_dir).expect("failed to clear partial vendor directory");
+            }
+            fs::create_dir_all(&vendor_dir).expect("failed to create vendor directory");
             extract_tarball(&archive_path, &vendor_dir);
-            let _ = fs::remove_file(&archive_path);
+            fs::remove_file(&archive_path).expect("failed to remove downloaded vendor archive");
         }
 
         vendor_dir
     };
 
-    let import_library = lib_dir.join(import_library_filename(&os));
-    assert!(
-        import_library.is_file(),
-        "zvec vendor archive is missing the expected import library: {}",
-        import_library.display()
-    );
+    for required_library in [lib_filename(&os), import_library_filename(&os)] {
+        let path = lib_dir.join(required_library);
+        assert!(
+            path.is_file(),
+            "zvec vendor archive is missing required library: {}",
+            path.display()
+        );
+    }
 
     println!("cargo:rustc-link-search=native={}", lib_dir.display());
     println!("cargo:rustc-link-lib=dylib=zvec_c_api");

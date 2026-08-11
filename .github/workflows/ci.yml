@@ -75,7 +75,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       ZVEC_REPO: alibaba/zvec
-      ZVEC_REV: v0.5.0
+      ZVEC_REV: 815a6783ff78b25926087af7a1b778582d78f848
 
     steps:
       - uses: actions/checkout@v7
@@ -88,7 +88,9 @@ jobs:
         id: zvec-cache
         uses: actions/cache@v6
         with:
-          path: _zvec/build/lib
+          path: |
+            _zvec/build/lib
+            _zvec/build/bin
           key: zvec-capi-x86_64-linux-android-${{ env.ZVEC_REV }}-${{ env.ZVEC_CACHE_VERSION }}
 
       - name: Checkout zvec
@@ -220,7 +222,7 @@ jobs:
     name: ios-build (${{ matrix.variant }})
     env:
       ZVEC_REPO: alibaba/zvec
-      ZVEC_REV: v0.5.0
+      ZVEC_REV: 815a6783ff78b25926087af7a1b778582d78f848
 
     steps:
       - uses: actions/checkout@v7
@@ -229,7 +231,9 @@ jobs:
         id: zvec-cache
         uses: actions/cache@v6
         with:
-          path: _zvec/build/lib
+          path: |
+            _zvec/build/lib
+            _zvec/build/bin
           key: zvec-capi-${{ matrix.rust-target }}-${{ env.ZVEC_REV }}-${{ env.ZVEC_CACHE_VERSION }}
 
       - name: Checkout zvec

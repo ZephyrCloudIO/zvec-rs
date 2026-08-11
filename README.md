@@ -68,6 +68,12 @@ cargo run -p zvec --example basic
 
 Android CI keeps validating the raw crate build so release artifacts stay aligned with the upstream `alibaba/zvec` C API.
 
+## Releasing
+
+Use the repository's **Release** workflow on `master` and choose the version bump. Do not create the release branch, tag, or GitHub Release manually.
+
+The workflow builds and validates every native artifact, publishes the tag and assets, and opens a generated `release/vX.Y.Z` PR containing the version, header, and checksums. Verify the workflow succeeded, then merge that PR so `master` matches the published release. After a failure, check whether the workflow created a branch, tag, or release. Start a new run from current `master` only when none exists; otherwise recover the existing release state instead of creating the same version again.
+
 ## Handoff Notes
 
 This repository is intended to be transferable: the raw crate remains the release anchor, while the safe wrapper is versioned in-tree and can evolve with the same upstream header and binary release process.

@@ -19,7 +19,9 @@ permissions:
 
 env:
   ZVEC_REPO: alibaba/zvec
-  ZVEC_REV: v0.5.0
+  # Exact commit behind upstream v0.5.0. The immutable revision keeps source,
+  # headers, and native cache entries on the same build input.
+  ZVEC_REV: 815a6783ff78b25926087af7a1b778582d78f848
   # CMake 4.0 removed compatibility with `cmake_minimum_required(VERSION < 3.5)`.
   # Several zvec thirdparty deps (lz4, arrow, …) still declare such low minimums,
   # and their ExternalProject sub-configures do NOT inherit the `-D` flag we pass
@@ -142,7 +144,7 @@ jobs:
           submodules: recursive
 
       - name: Setup MSVC (Windows)
-        if: runner.os == 'Windows' && steps.zvec-cache.outputs.cache-hit != 'true'
+        if: runner.os == 'Windows'
         uses: ilammy/msvc-dev-cmd@v1
 
       - name: Install Ninja
@@ -258,15 +260,20 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force staging
-          Copy-Item "_zvec/build/bin/*.dll" staging/
-          Copy-Item "_zvec/build/lib/*.lib" staging/
-          $importLibrary = "staging/zvec_c_api.lib"
-          if (-not (Test-Path -LiteralPath $importLibrary)) {
-            throw "zvec C API package is missing $importLibrary"
+          $runtimeLibrary = "_zvec/build/bin/zvec_c_api.dll"
+          $importLibrary = "_zvec/build/lib/zvec_c_api.lib"
+          foreach ($library in @($runtimeLibrary, $importLibrary)) {
+            if (-not (Test-Path -LiteralPath $library -PathType Leaf)) {
+              throw "zvec C API build is missing $library"
+            }
           }
+          New-Item -ItemType Directory -Force staging
+          Copy-Item $runtimeLibrary staging/
+          Copy-Item $importLibrary staging/
           $env:ZVEC_LIB_DIR = (Resolve-Path staging)
-          cargo build -p zvec --example basic --locked
+          $env:PATH = "$env:ZVEC_LIB_DIR;$env:PATH"
+          cargo run -p zvec --example basic --locked
+          cargo test -p zvec-rs --all-features --locked
           tar -czf "zvec_c_api-${{ matrix.target }}.tar.gz" -C staging .
 
       - name: Package (macOS)
